@@ -149,7 +149,7 @@ public static class Ltv
     {
         var facts = Signatures.Inspect(data, password);
         var gather = new Gatherer(client, new RevocationPool(), useStored: false);
-        foreach (var f in facts.Where(f => f.Info.Certificate is not null && f.Info.Status != SignatureStatus.Invalid))
+        foreach (var f in facts.Where(f => f.Intact && f.Info.Certificate is not null)) // as Plan: what the person was shown is all that is asked
         {
             await gather.CoverChain(f.Info.Certificate!, f.Certs, DateTimeOffset.UtcNow, cancel).ConfigureAwait(false);
             if (f.Tsa is { } tsa) await gather.CoverChain(tsa, f.TsaCerts, f.Stamped ?? DateTimeOffset.UtcNow, cancel).ConfigureAwait(false);
@@ -378,7 +378,7 @@ public static class Ltv
             }
             if (useStored)
             {
-                var (stored, at, responder, evidence) = Pool.Check(c, issuer, when);
+                var (stored, at, responder, evidence) = Judge(c, issuer, when);
                 if (stored is RevocationAnswer.Good or RevocationAnswer.Revoked or RevocationAnswer.RevokedLater)
                 {
                     Record(e, stored, at, evidence!, responder, "already in the file");
@@ -412,7 +412,7 @@ public static class Ltv
                         continue;
                     }
                     Pool.AddOcsp(der);
-                    var (answer, at, responder, evidence) = Pool.Check(c, issuer, when);
+                    var (answer, at, responder, evidence) = Judge(c, issuer, when);
                     if (answer == RevocationAnswer.Stale)
                     {
                         failure ??= $"The answer from {LtvClient.Host(url)} is too old to speak for the signing time.";
@@ -444,7 +444,7 @@ public static class Ltv
                         continue;
                     }
                     Pool.AddCrl(der);
-                    var (answer, at, responder, evidence) = Pool.Check(c, issuer, when);
+                    var (answer, at, responder, evidence) = Judge(c, issuer, when);
                     if (answer == RevocationAnswer.Stale)
                     {
                         failure ??= $"The list from {LtvClient.Host(url)} is too old to speak for the signing time.";
@@ -468,6 +468,13 @@ public static class Ltv
             }
             e.Detail = failure ?? $"{name} couldn't be asked about";
             FirstFailure ??= failure ?? e.Detail;
+        }
+
+        /// <summary>The pool's time budget is for the file's data: however long the servers took to answer, this question gets all of it.</summary>
+        private (RevocationAnswer Answer, DateTimeOffset? RevokedAt, X509Certificate2? Responder, byte[]? Evidence) Judge(X509Certificate2 c, X509Certificate2 issuer, DateTimeOffset when)
+        {
+            Pool.RestartBudget();
+            return Pool.Check(c, issuer, when);
         }
 
         private async Task CoverResponder(Entry e, X509Certificate2 issuer, DateTimeOffset when, List<Entry> used, CancellationToken cancel)

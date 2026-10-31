@@ -118,8 +118,9 @@ public static class Signatures
         var pool = new RevocationPool();
         using (doc)
         {
-            Dss.ReadInto(doc, pool);
+            // What the person asked for goes first: nothing a file holds can push it out of the pool's limits.
             if (online is not null) pool.AddFrom(online.Pool);
+            Dss.ReadInto(doc, pool);
             var fields = new List<FormEditor.Field>();
             var pageOf = new Dictionary<PdfDictionary, int>(ReferenceEqualityComparer.Instance);
             try
@@ -335,6 +336,33 @@ public static class Signatures
             TrustTime = trustTime,
             IsPades = subFilter == "ETSI.CAdES.detached" && si is not null && IsPadesBaseline(si),
         };
+    }
+
+    /// <summary>The signature dictionary holds an RFC 3161 token that verifies over the file's bytes its /ByteRange names.</summary>
+    internal static bool HoldsTimestamp(byte[] data, PdfDictionary v)
+    {
+        if (PdfObj.Array(v.Elements["/ByteRange"]) is not { Elements.Count: >= 4 } br) return false;
+        var range = new long[4];
+        for (var i = 0; i < 4; i++)
+        {
+            var n = PdfObj.Num(br, i);
+            if (!double.IsFinite(n) || n < 0 || n > data.Length || n != Math.Floor(n)) return false;
+            range[i] = (long)n;
+        }
+        if (range[0] != 0 || range[2] < range[1] || range[2] + range[3] > data.Length) return false;
+        var gap = data.AsSpan((int)range[1], (int)(range[2] - range[1]));
+        if (!IsHexStringOnly(gap) || HexContents(gap) is not { Length: > 0 } contents) return false;
+        var signed = new byte[range[1] + range[3]];
+        Array.Copy(data, 0, signed, 0, range[1]);
+        Array.Copy(data, range[2], signed, range[1], range[3]);
+        try
+        {
+            return Rfc3161TimestampToken.TryDecode(contents, out var token, out _) && token.VerifySignatureForData(signed, out _, token.AsSignedCms().Certificates);
+        }
+        catch (CryptographicException)
+        {
+            return false;
+        }
     }
 
     /// <summary>A PAdES baseline signature names its certificate in a signed attribute and keeps its time in /M, not in a signing-time attribute.</summary>

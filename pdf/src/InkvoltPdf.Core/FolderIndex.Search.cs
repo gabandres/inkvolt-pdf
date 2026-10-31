@@ -223,17 +223,22 @@ public sealed partial class FolderIndex
     /// </summary>
     internal static bool SideBySide(string text, IReadOnlyList<string> terms)
     {
-        var at = 0;       // terms matched so far, ending at the word before this one
+        // Every count of terms matched so far that ends at the word before this one: a phrase can start again inside itself.
+        var ends = new List<int>();
+        var next = new List<int>();
         var found = false;
         IndexTerms.Read(PageText.SearchTextOf(text), word =>
         {
             if (found) return;
-            if (at > 0 && Fits(word, terms, at))
-            {
-                if (++at == terms.Count) found = true;
-                return;
-            }
-            at = word.EndsWith(terms[0], StringComparison.Ordinal) ? 1 : 0;
+            next.Clear();
+            foreach (var at in ends)
+                if (Fits(word, terms, at))
+                {
+                    if (at + 1 == terms.Count) found = true;
+                    else next.Add(at + 1);
+                }
+            if (word.EndsWith(terms[0], StringComparison.Ordinal)) next.Add(1);
+            (ends, next) = (next, ends);
         });
         return found;
     }

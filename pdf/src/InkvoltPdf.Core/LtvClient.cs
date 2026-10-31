@@ -223,6 +223,11 @@ public sealed class LtvClient : IDisposable
         {
             throw Failed(kind, first, ex);
         }
+        catch (IOException ex)
+        {
+            // The connection broke while the reply was being read.
+            throw Failed(kind, first, new LtvFetchException($"{Host(url)} stopped answering.", ex));
+        }
         catch (HttpRequestException ex)
         {
             // A refusal from the connection's own check arrives wrapped.

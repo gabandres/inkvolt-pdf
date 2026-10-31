@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Runtime.InteropServices;
 using InkvoltPdf.Core;
 using PdfSharp.Drawing;
 using PdfSharp.Pdf;
@@ -262,7 +263,7 @@ public sealed class FolderIndexerTests : IDisposable
         Put("a.pdf", "aword");
         Put("sleeper.pdf", "sleepword");
         Put("z.pdf", "zword");
-        var options = Quick() with { WorkerArgs = ["index-worker-fault", "hang", "sleeper.pdf"], MaxWorkers = 1, Stall = TimeSpan.FromSeconds(1) };
+        var options = Quick() with { WorkerArgs = ["index-worker-fault", "hang", "sleeper.pdf"], MaxWorkers = 1, Stall = TimeSpan.FromSeconds(15) }; // long enough that a busy PC doesn't stall the healthy files too
         using var indexer = TakeOwnership(Start(options));
         UpToDate(indexer, 2);
         Assert.Equal(IndexedState.TooSlow, indexer.Index!.Files["sleeper.pdf"].State);
@@ -430,6 +431,124 @@ public sealed class FolderIndexerTests : IDisposable
         Assert.True(FolderIndexer.IsCloudOnly((FileAttributes)0x400000));
         Assert.True(FolderIndexer.IsCloudOnly((FileAttributes)0x40000));
         Assert.False(FolderIndexer.IsCloudOnly(FileAttributes.Archive));
+    }
+
+    /// <summary>A real Cloud Files sync root in the test's folder, as OneDrive has: no provider is connected, so nothing can come down.</summary>
+    private sealed class SyncRoot : IDisposable
+    {
+        private readonly string _path;
+        private SyncRoot(string path) => _path = path;
+
+        [StructLayout(LayoutKind.Sequential)]
+        private struct Registration
+        {
+            public uint Size;
+            [MarshalAs(UnmanagedType.LPWStr)] public string Name, Version;
+            public IntPtr RootIdentity;
+            public uint RootIdentityLength;
+            public IntPtr FileIdentity;
+            public uint FileIdentityLength;
+            public Guid Provider;
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        private struct Policies
+        {
+            public uint Size;
+            public ushort HydrationPrimary, HydrationModifier, PopulationPrimary, PopulationModifier;
+            public uint InSync, HardLink, Placeholders;
+        }
+
+        [DllImport("cldapi.dll", CharSet = CharSet.Unicode)]
+        private static extern int CfRegisterSyncRoot(string path, ref Registration registration, ref Policies policies, uint flags);
+
+        [DllImport("cldapi.dll", CharSet = CharSet.Unicode)]
+        private static extern int CfUnregisterSyncRoot(string path);
+
+        [DllImport("cldapi.dll")]
+        private static extern int CfConvertToPlaceholder(SafeHandle file, byte[] identity, uint identityLength, uint flags, out long usn, IntPtr overlapped);
+
+        /// <summary>Null where this Windows has no Cloud Files filter to do it with (a build server, say).</summary>
+        public static SyncRoot? TryRegister(string path)
+        {
+            var registration = new Registration { Name = "InkvoltTest", Version = "1.0", Provider = Guid.NewGuid() };
+            registration.Size = (uint)Marshal.SizeOf<Registration>();
+            var policies = new Policies { HydrationPrimary = 2, PopulationPrimary = 3 }; // a file comes down whole if asked; folders are always there, with no provider running to list them
+            policies.Size = (uint)Marshal.SizeOf<Policies>();
+            try
+            {
+                return CfRegisterSyncRoot(path, ref registration, ref policies, 0) >= 0 ? new SyncRoot(path) : null;
+            }
+            catch (Exception ex) when (ex is DllNotFoundException or EntryPointNotFoundException)
+            {
+                return null;
+            }
+        }
+
+        /// <param name="online">Its bytes dropped, as a file that is only in the cloud.</param>
+        public bool Convert(string file, bool online)
+        {
+            using var handle = File.OpenHandle(file, FileMode.Open, FileAccess.ReadWrite, FileShare.Read);
+            const uint inSync = 1, dehydrate = 2;
+            return CfConvertToPlaceholder(handle, [1], 1, inSync | (online ? dehydrate : 0), out _, IntPtr.Zero) >= 0;
+        }
+
+        public void Dispose() => CfUnregisterSyncRoot(_path);
+    }
+
+    [DllImport("ntdll.dll")]
+    private static extern sbyte RtlSetProcessPlaceholderCompatibilityMode(sbyte mode);
+
+    /// <summary>
+    /// Disguised is what the app itself gets from Windows (measured: mode 1, with the app's manifest): a placeholder reads as a plain file,
+    /// its recall attribute still on. Exposed is what PowerShell asks for: the reparse point shows too, as it may for a process Windows treats so.
+    /// </summary>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void A_folder_kept_by_a_cloud_drive_is_indexed_and_what_is_only_in_the_cloud_stays_there(bool exposed)
+    {
+        Directory.CreateDirectory(Path.Combine(Folder, "sub"));
+        var here = Put("here.pdf", "wordhere");
+        var nested = Put(Path.Combine("sub", "nested.pdf"), "wordnested");
+        var away = Put("away.pdf", "wordaway");
+        using var root = SyncRoot.TryRegister(Folder);
+        if (root is null || !root.Convert(here, false) || !root.Convert(nested, false) || !root.Convert(away, true)) return; // no Cloud Files on this Windows
+        var mode = RtlSetProcessPlaceholderCompatibilityMode(exposed ? (sbyte)2 : (sbyte)1);
+        using var restore = new Finally(() => RtlSetProcessPlaceholderCompatibilityMode(mode));
+        Assert.Equal(exposed, File.GetAttributes(here).HasFlag(FileAttributes.ReparsePoint));
+        Assert.True(FolderIndexer.IsCloudOnly(File.GetAttributes(away)), File.GetAttributes(away).ToString());
+        var awayBefore = File.GetAttributes(away);
+
+        using var indexer = TakeOwnership(Start());
+        WaitUntil(() => indexer.Status.Phase == IndexerPhase.UpToDate, "the first look", about: indexer);
+        Assert.True(indexer.Status.Searchable == 2, indexer.Status.Text);
+        Assert.Single(Search(indexer, "wordhere"));
+        Assert.Single(Search(indexer, "wordnested"));
+        Assert.Empty(Search(indexer, "wordaway"));
+        Assert.Equal(1, indexer.Status.CloudOnly);
+        Assert.Equal(awayBefore, File.GetAttributes(away)); // still not on this PC
+    }
+
+    private sealed class Finally(Action then) : IDisposable
+    {
+        public void Dispose() => then();
+    }
+
+    [Fact]
+    public void A_link_out_of_the_folder_isn_t_followed()
+    {
+        Put("inside.pdf", "wordinside");
+        var outside = Path.Combine(_dir, "outside");
+        Directory.CreateDirectory(outside);
+        File.WriteAllBytes(Path.Combine(outside, "beyond.pdf"), TestPdf.Make(1, "wordbeyond"));
+        using var mklink = Process.Start(new ProcessStartInfo("cmd", ["/c", "mklink", "/J", Path.Combine(Folder, "linked"), outside]) { RedirectStandardOutput = true, UseShellExecute = false })!;
+        mklink.WaitForExit();
+        Assert.Equal(0, mklink.ExitCode);
+        using var indexer = TakeOwnership(Start());
+        UpToDate(indexer, 1);
+        Assert.Empty(Search(indexer, "wordbeyond"));
+        Directory.Delete(Path.Combine(Folder, "linked")); // the junction, not what it leads to
     }
 
     /// <summary>

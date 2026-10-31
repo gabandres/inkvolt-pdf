@@ -612,7 +612,9 @@ public sealed partial class FolderIndex : IDisposable
             for (var i = 0; i < info.TermCount; i++)
             {
                 postings[i] = offset;
-                offset += r.Long();
+                var length = r.Long();
+                if (length is < 0 or > int.MaxValue) throw new FolderIndexDamagedException("Postings out of range.");
+                offset += length;
             }
             postings[info.TermCount] = offset;
             if (offset != info.PostingsOffset + info.PostingsLength) throw new FolderIndexDamagedException("Postings out of range.");
@@ -777,17 +779,20 @@ public sealed partial class FolderIndex : IDisposable
             var v = _r.Long();
             if ((v & 1) != 0)
             {
-                _id = checked(_id + (int)(v >> 1));
+                _id = InRange(_id + (v >> 1));
                 _page = _r.Int();
             }
             else
             {
-                _page = checked(_page + (int)(v >> 1));
+                _page = InRange(_page + (v >> 1));
             }
             id = _id;
             page = _page;
             return true;
         }
+
+        /// <summary>No checksum covers postings: what they say is checked here, so damage reads as damage.</summary>
+        private static int InRange(long value) => value is >= 0 and <= int.MaxValue ? (int)value : throw new FolderIndexDamagedException("A posting out of range.");
     }
 
     /// <summary>Little-endian base-128 numbers: the file's small numbers in few bytes. What it reads comes from a file, so it is checked.</summary>

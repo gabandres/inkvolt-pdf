@@ -1,6 +1,7 @@
 using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Globalization;
+using System.IO.Enumeration;
 using System.Text;
 
 namespace InkvoltPdf.Core;
@@ -442,19 +443,15 @@ public sealed class FolderIndexer : IDisposable
         {
             var now = DateTime.UtcNow;
             listed = [];
-            foreach (var file in new DirectoryInfo(_folder).EnumerateFiles("*.pdf", new EnumerationOptions
-            {
-                RecurseSubdirectories = true,
-                IgnoreInaccessible = true,
-                MatchCasing = MatchCasing.CaseInsensitive,
-                AttributesToSkip = FileAttributes.Hidden | FileAttributes.System | FileAttributes.ReparsePoint | FileAttributes.Temporary,
-            }))
+            foreach (var file in ListPdfs(_folder))
             {
                 if (file.Name.StartsWith("~$", StringComparison.Ordinal)) continue;
                 var rel = Path.GetRelativePath(_folder, file.FullName);
-                present.Add(rel);
                 var (size, ticks) = (file.Length, file.LastWriteTimeUtc.Ticks);
-                if (known.TryGetValue(rel, out var had) && had.Size == size && had.WriteTicks == ticks) continue;
+                var same = known.TryGetValue(rel, out var had) && had.Size == size && had.WriteTicks == ticks;
+                if (!same && IsLink(file)) continue;
+                present.Add(rel);
+                if (same) continue;
                 if (IsCloudOnly(file.Attributes))
                 {
                     cloud++; // reading it would download it
@@ -502,6 +499,37 @@ public sealed class FolderIndexer : IDisposable
         _waiting = 0;
         SetPhase(IndexerPhase.UpToDate);
         return recent ? _options.Quiet : _options.Rescan;
+    }
+
+    /// <summary>
+    /// The PDFs under <paramref name="folder"/>. A link is left alone (it leads outside the folder, or round in a circle), which the
+    /// reparse-point attribute can't say by itself: a cloud drive's files and folders carry it too, in a process that sees them
+    /// as what they are (a usual one sees them disguised as plain files).
+    /// </summary>
+    private static FileSystemEnumerable<FileInfo> ListPdfs(string folder) =>
+        new(folder, static (ref FileSystemEntry entry) => (FileInfo)entry.ToFileSystemInfo(), new EnumerationOptions
+        {
+            RecurseSubdirectories = true,
+            IgnoreInaccessible = true,
+            AttributesToSkip = FileAttributes.Hidden | FileAttributes.System | FileAttributes.Temporary,
+        })
+        {
+            ShouldIncludePredicate = static (ref FileSystemEntry entry) => !entry.IsDirectory && FileSystemName.MatchesSimpleExpression("*.pdf", entry.FileName),
+            ShouldRecursePredicate = static (ref FileSystemEntry entry) => (entry.Attributes & FileAttributes.ReparsePoint) == 0 || !IsLink(entry.ToFileSystemInfo()),
+        };
+
+    /// <summary>A symbolic link or junction, as against a cloud drive's placeholder. Asking reads no file's data, so downloads nothing.</summary>
+    private static bool IsLink(FileSystemInfo entry)
+    {
+        if ((entry.Attributes & FileAttributes.ReparsePoint) == 0) return false;
+        try
+        {
+            return entry.LinkTarget is not null;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return true; // can't tell: left alone, as anything out of reach is
+        }
     }
 
     /// <summary>A file of a cloud drive with its bytes elsewhere: Offline, RecallOnOpen or RecallOnDataAccess.</summary>

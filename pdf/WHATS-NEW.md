@@ -14,6 +14,7 @@ Each release gets a `## x.y.z` heading before it's packed (`packaging/pack-msix.
 - Opening a signed file no longer goes online at all, where it used to check revocation by itself. Check Signatures Online does it when you ask, and a signature's details now say what the file holds for checking it later.
 - Timestamps now go over https only. Sectigo's free server is suggested, and you can enter another. Nothing is contacted unless you add a timestamp.
 - A locked form field's appearance swapped in a later update now shows as a change the signature doesn't allow, not only a changed value.
+- Something laid over a signed page in a later update, as a field calling itself a timestamp or a comment written inside the page's own list, now shows as a change; on a file certified with no changes, as one the certification doesn't allow.
 - Search Folders (Edit menu, Ctrl+Alt+Shift+F): find a word in every PDF of a folder in a moment, with the text around each hit, and open the file right at it. Inkvolt PDF indexes the folder in the background, on your PC, and keeps up as files change. Files it can't read are skipped and listed.
 
 ## 1.4.0

@@ -671,8 +671,8 @@ internal sealed class RevocationPool
         {
             if (OutOfBudget || checks >= MaxChecksPerCertificate) break;
             if (r.AnswerFor(cert, issuer) is not { } a) continue;
-            checks++;
             if (a.ThisUpdate > now || !r.SignedFor(issuer, _certs, out var responder)) continue;
+            checks++; // only what verifies: forgeries can't use up the turns of a real answer (the time budget ends a file full of them)
             switch (a.Status)
             {
                 case OcspCertStatus.Revoked:
@@ -692,8 +692,8 @@ internal sealed class RevocationPool
         {
             if (OutOfBudget || checks >= MaxChecksPerCertificate) break;
             if (!c.IssuerName.AsSpan().SequenceEqual(issuer.SubjectName.RawData)) continue;
-            checks++;
             if (c.ThisUpdate > now || !c.SpeaksFor(cert, issuer)) continue;
+            checks++;
             if (c.RevokedAt(cert) is { } at)
             {
                 if (at > when) best = Rank(best, (RevocationAnswer.RevokedLater, at, null, c.Der));

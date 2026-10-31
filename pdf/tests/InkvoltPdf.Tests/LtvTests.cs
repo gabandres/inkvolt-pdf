@@ -816,6 +816,202 @@ public class LtvTests
         Assert.Empty(pki.Hits);
     }
 
+    // ---- What only looks like validation data ----
+
+    private static double PixelsChanged(byte[] a, byte[] b)
+    {
+        using var ea = PdfEngine.Open(a, MuPDFCore.InputFileTypes.PDF, null);
+        using var eb = PdfEngine.Open(b, MuPDFCore.InputFileTypes.PDF, null);
+        var (pa, pb) = (ea.Render(0, 1).Pixels, eb.Render(0, 1).Pixels);
+        Assert.Equal(pa.Length, pb.Length);
+        return (double)Enumerable.Range(0, pa.Length).Count(i => pa[i] != pb[i]) / pa.Length;
+    }
+
+    private static PdfDictionary Overlay(PdfDocument doc, string subtype, int x1, int y1, int x2, int y2, int flags)
+    {
+        var annot = new PdfDictionary(doc);
+        annot.Elements["/Type"] = new PdfName("/Annot");
+        annot.Elements["/Subtype"] = new PdfName(subtype);
+        annot.Elements["/F"] = new PdfInteger(flags);
+        annot.Elements["/Rect"] = new PdfArray(doc, new PdfInteger(x1), new PdfInteger(y1), new PdfInteger(x2), new PdfInteger(y2));
+        var look = PdfObj.FormXObject(doc, "0 0 0 rg 0 0 300 300 re f"u8.ToArray(), 0, 0, 300, 300, null);
+        annot.Elements["/AP"] = new PdfDictionary(doc) { Elements = { ["/N"] = look.Reference! } };
+        return annot;
+    }
+
+    /// <summary>An update adding a signature field that says it is a document timestamp and has nothing behind that but the name.</summary>
+    private static byte[] WithFakeTimestamp(byte[] signed, int x1, int y1, int x2, int y2, int flags)
+    {
+        using var doc = Signing.OpenForAppend(signed, null)!;
+        var page = doc.Pages[0];
+        var widget = Overlay(doc, "/Widget", x1, y1, x2, y2, flags);
+        widget.Elements["/FT"] = new PdfName("/Sig");
+        widget.Elements["/T"] = PdfObj.MakeString("Timestamp9");
+        widget.Elements["/P"] = page.Reference!;
+        var sig = new PdfDictionary(doc);
+        sig.Elements["/SubFilter"] = new PdfName("/ETSI.RFC3161");
+        doc.Internals.AddObject(sig);
+        widget.Elements["/V"] = sig.Reference!;
+        doc.Internals.AddObject(widget);
+        PdfObj.Annots(doc, page).Elements.Add(widget.Reference!);
+        PdfObj.Array(PdfObj.Dict(doc.Internals.Catalog.Elements["/AcroForm"])!.Elements["/Fields"])!.Elements.Add(widget.Reference!);
+        return Incremental.TrySave(doc, null)!;
+    }
+
+    [Theory]
+    [InlineData(CertificationLevel.None, SignatureStatus.ModifiedAfterSigning)]
+    [InlineData(CertificationLevel.NoChanges, SignatureStatus.DisallowedChanges)]
+    public void A_field_drawn_over_the_page_that_calls_itself_a_timestamp_is_a_change(CertificationLevel level, SignatureStatus expected)
+    {
+        using var pki = new LtvTestPki();
+        var signed = SignBb(pki, certify: level);
+        var forged = WithFakeTimestamp(signed, 50, 50, 350, 350, 4);
+        Assert.True(PixelsChanged(signed, forged) > 0.05);
+        Assert.Equal(expected, First(forged, pki).Status);
+    }
+
+    [Theory]
+    [InlineData(CertificationLevel.None, SignatureStatus.ModifiedAfterSigning)]
+    [InlineData(CertificationLevel.NoChanges, SignatureStatus.DisallowedChanges)]
+    public void An_invisible_field_with_no_real_timestamp_in_it_is_a_change(CertificationLevel level, SignatureStatus expected)
+    {
+        using var pki = new LtvTestPki();
+        var forged = WithFakeTimestamp(SignBb(pki, certify: level), 0, 0, 0, 0, 132);
+        Assert.Equal(expected, First(forged, pki).Status);
+    }
+
+    [Theory]
+    [InlineData(0, 0, 0, 0, 132)] // what we write
+    [InlineData(100, 100, 100, 400, 4)] // no width
+    [InlineData(50, 50, 350, 350, 2)] // hidden
+    public void What_counts_as_an_invisible_field_really_draws_nothing(int x1, int y1, int x2, int y2, int flags)
+    {
+        using var pki = new LtvTestPki();
+        var signed = SignBb(pki);
+        Assert.Equal(0, PixelsChanged(signed, WithFakeTimestamp(signed, x1, y1, x2, y2, flags)));
+    }
+
+    private static byte[] WithDirectAnnotation(byte[] signed, string subtype)
+    {
+        using var doc = Signing.OpenForAppend(signed, null)!;
+        PdfObj.Annots(doc, doc.Pages[0]).Elements.Add(Overlay(doc, subtype, 50, 50, 350, 350, 4));
+        doc.Internals.Catalog.Elements["/DSS"] = new PdfDictionary(doc);
+        return Incremental.TrySave(doc, null)!;
+    }
+
+    [Theory]
+    [InlineData(CertificationLevel.None, "/Stamp", SignatureStatus.ModifiedAfterSigning)]
+    [InlineData(CertificationLevel.NoChanges, "/Stamp", SignatureStatus.DisallowedChanges)]
+    [InlineData(CertificationLevel.None, "/Widget", SignatureStatus.ModifiedAfterSigning)]
+    [InlineData(CertificationLevel.NoChanges, "/Widget", SignatureStatus.DisallowedChanges)]
+    public void An_annotation_written_inside_the_page_s_list_is_a_change(CertificationLevel level, string subtype, SignatureStatus expected)
+    {
+        using var pki = new LtvTestPki();
+        var signed = SignBb(pki, certify: level);
+        var forged = WithDirectAnnotation(signed, subtype);
+        if (subtype == "/Stamp") Assert.True(PixelsChanged(signed, forged) > 0.05);
+        Assert.Equal(expected, First(forged, pki).Status);
+    }
+
+    [Fact]
+    public async Task An_annotation_inside_the_page_s_list_when_signed_doesn_t_get_in_the_way_of_validation_data()
+    {
+        using var pki = new LtvTestPki();
+        byte[] pdf;
+        using (var doc = PdfObj.Open(TestPdf.Make(2), null, PdfSharp.Pdf.IO.PdfDocumentOpenMode.Modify))
+        {
+            PdfObj.Annots(doc, doc.Pages[0]).Elements.Add(Overlay(doc, "/Stamp", 50, 50, 100, 100, 4));
+            pdf = PdfObj.Save(doc, rewrite: true);
+        }
+        using var client = pki.Client();
+        var extended = (await Ltv.AddVerificationAsync(SignBb(pki, pdf), null, client, client.TimestampSender(pki.TimestampUrl))).Pdf;
+        var s = First(extended, pki);
+        Assert.Equal(SignatureStatus.Valid, s.Status);
+        Assert.True(s.LongTerm!.OnlyValidationDataAfter);
+    }
+
+    [Theory]
+    [InlineData(8)]   // as many as a certificate's answers were looked at
+    [InlineData(256)] // as many as the store holds
+    public async Task Forged_answers_in_a_file_can_t_hide_what_the_server_said(int count)
+    {
+        using var pki = new LtvTestPki();
+        using var forger = RSA.Create(2048);
+        var signed = SignBb(pki);
+        pki.Revoke(pki.Signer, DateTimeOffset.UtcNow.AddDays(-1));
+        var request = LtvTestPki.OcspRequest(pki.Signer, pki.Intermediate);
+        var forged = Enumerable.Range(0, count).Select(i => pki.OcspReply(request, forger, DateTimeOffset.UtcNow.AddMinutes(-i - 1))).ToList();
+        var pdf = Dss.Append(signed, null, [new VriEntry("AA", [], forged, [])]);
+        using var client = pki.Client();
+        var online = await Ltv.CheckOnlineAsync(pdf, null, client);
+        Assert.Contains(online.Certificates, c => c.Outcome.Contains("REVOKED"));
+        Assert.Contains("Revoked", Signatures.Verify(pdf, null, online.Snapshot).First().CertificateStatus);
+    }
+
+    [Fact]
+    public async Task Forged_answers_can_t_push_a_real_one_out_of_a_store()
+    {
+        using var pki = new LtvTestPki();
+        using var forger = RSA.Create(2048);
+        var signed = SignBb(pki);
+        pki.Revoke(pki.Signer, DateTimeOffset.UtcNow.AddDays(-1));
+        var request = LtvTestPki.OcspRequest(pki.Signer, pki.Intermediate);
+        List<byte[]> answers = [.. Enumerable.Range(0, 8).Select(i => pki.OcspReply(request, forger, DateTimeOffset.UtcNow.AddMinutes(-i - 1))), pki.OcspReply(request)];
+        var pdf = Dss.Append(signed, null, [new VriEntry("AA", [pki.Intermediate.RawData], answers, [])]);
+        Assert.Contains("Revoked", First(pdf, pki).CertificateStatus);
+    }
+
+    [Fact]
+    public async Task Slow_servers_don_t_use_up_the_time_a_file_is_given()
+    {
+        using var pki = new LtvTestPki();
+        pki.Overrides["/ocsp"] = async body =>
+        {
+            await Task.Delay(TimeSpan.FromSeconds(11));
+            return LtvTestPki.Http(200, pki.OcspReply(body));
+        };
+        using var client = pki.Client(TimeSpan.FromSeconds(15));
+        var result = await Ltv.AddVerificationAsync(SignBb(pki), null, client); // two answers, 22 s in all
+        Assert.All(result.Certificates, c => Assert.True(c.Covered, $"{c.Name}: {c.Outcome}"));
+    }
+
+    [Fact]
+    public async Task Checking_online_asks_only_what_the_window_listed()
+    {
+        using var pki = new LtvTestPki();
+        using var doc = Signing.OpenForAppend(SignBb(pki), null)!;
+        doc.Pages[0].Elements["/Rotate"] = new PdfInteger(90);
+        var changed = Incremental.TrySave(doc, null)!;
+        Assert.Equal(SignatureStatus.DisallowedChanges, First(changed, pki).Status);
+        using var client = pki.Client();
+        Assert.Empty(Ltv.Plan(changed, null, client, onlyMissing: false).Addresses);
+        await Ltv.CheckOnlineAsync(changed, null, client);
+        Assert.Empty(pki.Hits);
+    }
+
+    private static byte[] CutOff() => "HTTP/1.1 200 X\r\nContent-Length: 1000\r\nConnection: close\r\n\r\nabc"u8.ToArray();
+
+    [Fact]
+    public async Task A_reply_cut_off_is_a_server_that_can_t_be_used()
+    {
+        using var pki = new LtvTestPki();
+        pki.Overrides["/short"] = _ => Task.FromResult(CutOff());
+        using var client = pki.Client();
+        var ex = await Assert.ThrowsAsync<LtvFetchException>(() => client.GetAsync($"{pki.BaseUrl}/short", LtvAddressKind.Ocsp, LtvClient.MaxOcspReply));
+        Assert.Contains("127.0.0.1", ex.Message);
+    }
+
+    [Fact]
+    public async Task A_responder_s_reply_cut_off_leaves_the_crl_to_answer()
+    {
+        using var pki = new LtvTestPki();
+        pki.Overrides["/ocsp"] = _ => Task.FromResult(CutOff());
+        using var client = pki.Client();
+        var result = await Ltv.AddVerificationAsync(SignBb(pki), null, client);
+        Assert.All(result.Certificates, c => Assert.True(c.Covered, $"{c.Name}: {c.Outcome}"));
+        Assert.Contains(result.Certificates, c => c.Outcome.Contains("CRL"));
+    }
+
     // ---- Free and Pro ----
 
     [Fact]

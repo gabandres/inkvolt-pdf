@@ -129,6 +129,71 @@ public sealed class FolderIndexTests : IDisposable
         Assert.Equal(expected, FolderIndex.SideBySide(page, IndexTerms.Of(query)));
 
     [Theory]
+    [InlineData("bye bye baby", "bye bye bye baby")]
+    [InlineData("a a b", "x a a a b y")]
+    [InlineData("big big big dog", "big big big big dog")]
+    [InlineData("a b a c", "a b a b a c")]
+    public void A_phrase_that_starts_again_inside_itself_is_found(string query, string page)
+    {
+        Assert.NotEmpty(PageText.FindIn(page, query, false, false, true));
+        Assert.True(FolderIndex.SideBySide(page, IndexTerms.Of(query)));
+    }
+
+    [Theory]
+    [InlineData("a a b", "a a c a b")]
+    [InlineData("a b a c", "a b a a c")]
+    public void A_phrase_starting_again_doesn_t_join_what_isn_t_side_by_side(string query, string page) =>
+        Assert.False(FolderIndex.SideBySide(page, IndexTerms.Of(query)));
+
+    private static byte[] Varint(long value)
+    {
+        var bytes = new List<byte>();
+        var v = (ulong)value;
+        while (v >= 0x80)
+        {
+            bytes.Add((byte)(v | 0x80));
+            v >>= 7;
+        }
+        bytes.Add((byte)v);
+        return [.. bytes];
+    }
+
+    [Theory]
+    [InlineData((long)int.MaxValue, true)] // a file number past what there can be, once added to the last
+    [InlineData(-50L, true)]               // a file number below zero
+    [InlineData(int.MaxValue + 5L, false)] // a page past what there can be
+    [InlineData(-5L, false)]               // a page below zero
+    public void Postings_out_of_range_are_damage(long difference, bool file)
+    {
+        byte[] list = [.. Varint((5 << 1) | 1), 3, .. Varint(file ? (difference << 1) | 1 : difference << 1), 0];
+        Assert.Throws<FolderIndexDamagedException>(() =>
+        {
+            var reader = new FolderIndex.PostingReader(list);
+            while (reader.Next(out _, out _)) { }
+        });
+    }
+
+    [Theory]
+    [InlineData(-5L)]
+    [InlineData(int.MinValue * 4L)]
+    public void A_damaged_posting_in_a_file_rebuilds_rather_than_stopping_a_search(long difference)
+    {
+        string?[] pages = [.. Enumerable.Range(0, 40).Select(i => (string?)$"hello page{i}")];
+        using (var index = FolderIndex.Open(Base)) Commit(index, b => Add(b, "a.pdf", pages));
+        var path = Directory.GetFiles(_dir, "*.idx").Single();
+        var bytes = File.ReadAllBytes(path);
+        // "hello" on all 40 pages: file 0, page 0, then a step of one page each. The checksums cover neither postings nor text.
+        byte[] postings = [1, 0, .. Enumerable.Repeat((byte)2, 39)];
+        var at = bytes.AsSpan().IndexOf(postings);
+        Assert.True(at > 0);
+        Varint((difference << 1) | 1).CopyTo(bytes, at);
+        File.WriteAllBytes(path, bytes);
+        using var damaged = FolderIndex.Open(Base);
+        Assert.Throws<FolderIndexDamagedException>(() => Search(damaged, "hello"));
+        Assert.Throws<FolderIndexDamagedException>(() => damaged.Compact());
+    }
+
+    [Theory]
     [InlineData("the the")]
     [InlineData("big big dog")]
     [InlineData("exam-\nple page")]
