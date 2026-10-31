@@ -162,6 +162,7 @@
                                     <MenuItem Command="app:Cmd.FindNext" />
                                     <MenuItem Command="app:Cmd.FindPrevious" />
                                     <MenuItem Command="app:Cmd.SearchPane" />
+                                    <MenuItem Command="app:Cmd.SearchFolders" />
                                     <Separator />
                                     <MenuItem x:Name="HandMenu" Command="app:Cmd.ToolHand" InputGestureText="H" />
                                     <MenuItem x:Name="SelectMenu" Command="app:Cmd.ToolSelect" InputGestureText="T" />

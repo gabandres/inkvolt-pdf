@@ -25,6 +25,8 @@ public enum ProFeature
 
     /// <summary>Adding long-term validation data and document timestamps, when signing and to signed files (verifying stays free).</summary>
     LongTermValidation,
+    /// <summary>Indexing folders and searching them (Find and the Search pane on open documents stay free).</summary>
+    FolderSearch,
 }
 
 /// <summary>
@@ -80,6 +82,7 @@ public static class Pro
         ProFeature.ReadingOrder => "Reading order",
         ProFeature.AccessibleOutput => "Accessible PDF/A-2a",
         ProFeature.LongTermValidation => "Long-term validation",
+        ProFeature.FolderSearch => "Folder search",
         _ => "Command line",
     };
 
@@ -92,6 +95,7 @@ public static class Pro
         ProFeature.ReadingOrder => "See the order a screen reader follows as numbered boxes on the page, move pieces up, down or to another page, change what a piece is, and write the tags again.",
         ProFeature.AccessibleOutput => "Save a tagged PDF as PDF/A-2a, the archival format that keeps the tags and says it is accessible (PDF/UA); in Batch too.",
         ProFeature.LongTermValidation => "Keep signatures checkable for decades: store in the file the proof that each certificate was good when it signed (PAdES B-LT), add a document timestamp over it (B-LTA), and do the same for files signed earlier. You see which addresses are asked before anything goes online.",
+        ProFeature.FolderSearch => "Index whole folders on this PC, nothing sent anywhere, and find a word across thousands of PDFs in under a second, with the text around each hit; a result opens at the hit, and the index keeps up as files change.",
         _ => "inkvoltpdf --batch runs a preset on files or folders without a window; inkvoltpdf --watch watches a folder from a terminal or a scheduled task.",
     };
 
@@ -104,6 +108,7 @@ public static class Pro
         ProFeature.ReadingOrder => "Fixing the reading order is part of Inkvolt Pro.",
         ProFeature.AccessibleOutput => "Saving accessible PDF/A-2a files is part of Inkvolt Pro.",
         ProFeature.LongTermValidation => "Adding long-term validation data is part of Inkvolt Pro.",
+        ProFeature.FolderSearch => "Searching folders is part of Inkvolt Pro.",
         _ => "The command line is part of Inkvolt Pro.",
     };
 
