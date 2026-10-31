@@ -8,7 +8,7 @@ using InkvoltPrint.Core.Imaging;
 using InkvoltPrint.Windows.Ocr;
 using MuPDFCore;
 
-// dotnet run --project pdf/tools/ocr-corpus -c Release -- make|run|report [--out dir] [--note text]
+// dotnet run --project pdf/tools/ocr-corpus -c Release -- make|run|report|cleanup [--out dir] [--note text] [--only name]
 CultureInfo.CurrentCulture = CultureInfo.InvariantCulture;
 var command = args.FirstOrDefault() ?? "run";
 string Option(string name, string fallback) => args.SkipWhile(a => a != name).Skip(1).FirstOrDefault() ?? fallback;
@@ -32,11 +32,37 @@ switch (command)
     case "report":
         Report(JsonSerializer.Deserialize<List<FileResult>>(File.ReadAllText(resultsJson))!);
         break;
+    case "cleanup":
+        return Cleanup();
     default:
-        Console.Error.WriteLine("Usage: make | run | report [--out dir] [--note text]");
+        Console.Error.WriteLine("Usage: make | run | report | cleanup [--out dir] [--note text] [--only name]");
         return 2;
 }
 return 0;
+
+// Inkvolt Print's filters (roadmap 2.3): today's reading and the cleaned one, in the languages this PC has.
+int Cleanup()
+{
+    var only = Option("--only", "");
+    var installed = WindowsRecognizer.Languages().Select(l => l.Tag).ToList();
+    var measured = new List<CleanupResult>();
+    foreach (var file in CleanupCorpus.Files.Where(f => only.Length == 0 || f.Name == only))
+    {
+        var tag = CleanupCorpus.Tag(file.Language);
+        var recognizer = installed.Contains(tag, StringComparer.OrdinalIgnoreCase) ? WindowsRecognizer.Create(tag) : null;
+        var result = CleanupCorpus.Measure(file, recognizer);
+        Console.WriteLine(result.Today is null ? $"{file.Name}: {result.Words} words; {tag} isn't installed, not run"
+            : $"{file.Name}: {result.Words} words; today {result.Today:P1}, cleaned {result.After:P1}; filters {result.AfterMs:0} ms a page");
+        measured.Add(result);
+    }
+    if (only.Length == 0)
+    {
+        var path = Path.Combine(toolDir, "RESULTS-cleanup.md");
+        File.WriteAllText(path, CleanupCorpus.Report(measured, installed));
+        Console.WriteLine($"Wrote {path}");
+    }
+    return measured.Where(r => r.Today is not null).All(r => r.After < r.Today) ? 0 : 1;
+}
 
 void Make()
 {
