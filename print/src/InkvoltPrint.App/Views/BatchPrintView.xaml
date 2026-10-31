@@ -107,18 +107,17 @@
                         </StackPanel>
                     </Border>
 
-                    <DockPanel DockPanel.Dock="Top" Margin="12,12,12,4">
-                        <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
-                            <Button Content="Check again" Command="{Binding CheckAgainCommand}" Style="{StaticResource LinkButton}" Margin="12,0,0,0"
-                                    ToolTip="Look at every file again, after one changed or came back" />
-                            <Button Content="Start over" Command="{Binding StartOverCommand}" Style="{StaticResource LinkButton}" Margin="12,0,0,0"
-                                    ToolTip="Forget the results, so Print sends every file again" />
-                            <Button Content="Open the queue" Command="{Binding OpenPrintQueueCommand}" Style="{StaticResource LinkButton}" Margin="12,0,0,0" />
-                            <Button Content="Remove all" Command="{Binding ClearCommand}" Style="{StaticResource LinkButton}" Margin="12,0,0,0" />
-                        </StackPanel>
-                        <TextBlock Text="Prints from the top down" Style="{StaticResource Caption}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center"
+                    <!-- Wraps in a narrow window: a caption that shrank to nothing beside the links would wrap a letter to a line and push the list out of view -->
+                    <WrapPanel DockPanel.Dock="Top" Margin="12,12,12,4">
+                        <TextBlock Text="Prints from the top down" Style="{StaticResource Caption}" TextWrapping="NoWrap" VerticalAlignment="Center" Margin="0,0,12,0"
                                    ToolTip="Delete removes the file in focus; Alt+Up and Alt+Down move it" />
-                    </DockPanel>
+                        <Button Content="Check again" Command="{Binding CheckAgainCommand}" Style="{StaticResource LinkButton}" Margin="0,0,12,0"
+                                ToolTip="Look at every file again, after one changed or came back" />
+                        <Button Content="Start over" Command="{Binding StartOverCommand}" Style="{StaticResource LinkButton}" Margin="0,0,12,0"
+                                ToolTip="Forget the results, so Print sends every file again" />
+                        <Button Content="Open the queue" Command="{Binding OpenPrintQueueCommand}" Style="{StaticResource LinkButton}" Margin="0,0,12,0" />
+                        <Button Content="Remove all" Command="{Binding ClearCommand}" Style="{StaticResource LinkButton}" />
+                    </WrapPanel>
 
                     <ListBox x:Name="List" ItemsSource="{Binding Rows}" SelectedItem="{Binding Selected}" AutomationProperties.Name="Files to print, in order"
                              Background="Transparent" BorderThickness="0" Padding="8,0,8,8" HorizontalContentAlignment="Stretch"
