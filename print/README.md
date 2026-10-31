@@ -69,7 +69,7 @@ by project reference for scanning (File › Scan…, Insert from Scanner…) and
   and removing it in either app removes it for both; a key from an app's own settings (Inkvolt PDF 1.2.1 kept it there)
   moves into the file on first read, and the settings hold a copy only when the file can't be written. Inkvolt Print's
   Pro features are the roadmap's office ones (supply history export, batch print lists and the command line, fleet
-  export, scanner sharing, SNMPv3; the supply history export is built); `Pro.Allows(feature)` is their one check, and **the gate is off
+  export, scanner sharing, SNMPv3; the first three are built); `Pro.Allows(feature)` is their one check, and **the gate is off
   while the apps launch** (`ProCheck.Enforced`, one switch for both; see the roadmap's "Free and Pro"): everything is
   free, a key is still verified and shown. Tested in `ProTests` (the vector against the built-in key, every changed
   character refused, a print-only key refused by the PDF check, the shared file, a packaged copy's redirected file).
