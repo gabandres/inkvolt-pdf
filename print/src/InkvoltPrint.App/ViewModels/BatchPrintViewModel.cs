@@ -123,6 +123,7 @@ public sealed partial class BatchPrintViewModel(IBatchQueue queue, IBatchDocumen
         {
             if (Rows.Count == 0) return "";
             var ready = Rows.Where(r => r.StillToSend && r.Line is { Problem: null }).ToList();
+            if (ready.Count == 0 && Rows.All(r => r.State == BatchPrintState.Sent)) return $"All {Rows.Count:N0} sent. Start over prints them again.";
             var text = new StringBuilder($"{BatchPrintText.Count(ready.Count, "file")}, {BatchPrintText.Sheets(ready.Sum(r => r.Line!.Sheets))} in all.");
             var leftOut = Rows.Count(r => r.StillToSend && r.Line is { Problem: not null });
             if (leftOut > 0) text.Append($" {leftOut:N0} left out.");
