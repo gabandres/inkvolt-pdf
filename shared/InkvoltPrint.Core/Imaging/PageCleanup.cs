@@ -233,13 +233,14 @@ public static class PaperEdge
 /// <summary>
 /// Evens the paper out to white, for keeps (<see cref="PaperLevel"/> only readies a page for a recognizer, and whitens photos
 /// and thin strokes along with it). The white point follows the scan's own noise, so a quiet scan keeps marks a few levels
-/// darker than its paper. A thin stroke a median would smooth away (a hairline, a pencil signature) is found by the darkest
-/// average along four directions and keeps its pixels. Blocks that are a picture (mostly mid-tones or dark) are divided by the
-/// paper around them and never snapped to white. A page whose paper is dark is left alone. Then lone specks go (<see cref="Despeckle"/>).
+/// darker than its paper. A thin stroke a median would smooth away (a hairline, a pencil signature) is found as a connected run
+/// of pixels darker than the noise and keeps them. Blocks that aren't paper (a picture: mostly mid-tones or dark, or at a level
+/// no slow shading leads to) are divided by the paper around them, never darkened, and never snapped to white. A page whose paper is dark is left alone. Then lone specks go (<see cref="Despeckle"/>).
 /// </summary>
 public static class PageBackground
 {
-    private const int FlatBand = 12, StrokeSamples = 7;
+    private const int FlatBand = 12, MinStrokePixels = 16;
+    private const float MinStrokeContrast = 10, MaxStep = 0.03f;
 
     /// <summary>Whether it changed the page. In place.</summary>
     public static bool Whiten(byte[] pixels, int width, int height, int channels, int dpi, out int specks, CancellationToken cancel = default)
@@ -281,7 +282,7 @@ public static class PageBackground
                     else mid += hs[v];
                 var i = by * cols + bx;
                 levels[i] = level;
-                picture[i] = mid * 100 >= all * 45 || dark * 100 >= all * 60;
+                picture[i] = mid * 100 >= all * 60 || dark * 100 >= all * 60;
                 // Noise: the spread of the paper's top half, 90th percentile to the top half's middle, in a block that is mostly paper.
                 noiseSmooth[i] = (level - PercentileOfTop(hs, level, FlatBand)) / 0.67f;
                 var levelRaw = Percentile(hr, all, 90);
@@ -294,18 +295,18 @@ public static class PageBackground
         var paper = candidates[(int)(candidates.Count * 0.9)];
         if (paper < 128) return false; // a dark page, not paper to whiten
 
-        var known = new bool[levels.Length];
-        for (var i = 0; i < levels.Length; i++) known[i] = !picture[i] && levels[i] >= 0.55f * paper;
+        // Paper is what connects to the page's lightest level in small steps: shading changes slowly, a picture's edge doesn't.
+        var known = PaperBlocks(levels, picture, paper, cols, rows);
         var paperBlocks = Enumerable.Range(0, levels.Length).Where(i => known[i]).ToList();
         if (paperBlocks.Count == 0) return false;
         var sigmaRaw = Median(paperBlocks.Select(i => noiseRaw[i]));
         var sigmaSmooth = Median(paperBlocks.Select(i => noiseSmooth[i]));
+        var isPaper = (bool[])known.Clone();
         FillUnknown(levels, known, cols, rows);
         var map = new PaperLevel.Map(width, height, block, cols, rows, levels);
 
         var white = Math.Clamp(1 - 3.8f * sigmaSmooth / paper, 0.86f, 0.97f);
-        var strokeContrast = Math.Max(8f, 3.5f * sigmaRaw / MathF.Sqrt(StrokeSamples));
-        var step = Math.Max(1, dpi / 300);
+        var strokes = Strokes(gray, width, height, map, Math.Max(MinStrokeContrast, 2.5f * sigmaRaw), Math.Max(8, MinStrokePixels * dpi / 300), cancel);
         var result = new byte[gray.Length];
         Parallel.For(0, height, options, y =>
         {
@@ -313,17 +314,12 @@ public static class PageBackground
             {
                 var i = y * width + x;
                 var level = map.At(x, y);
-                var inPicture = picture[y / block * cols + x / block];
-                if (inPicture)
+                if (!isPaper[y / block * cols + x / block])
                 {
-                    result[i] = (byte)Math.Clamp(gray[i] * 255f / level, 0, 254);
+                    result[i] = (byte)Math.Clamp(gray[i] * 255f / Math.Max(level, gray[i]), 0, 254);
                     continue;
                 }
-                if (smooth[i] >= white * level)
-                {
-                    var stroke = gray[i] < level - strokeContrast && DarkestAverage(gray, width, height, x, y, step) < level - strokeContrast;
-                    result[i] = stroke ? (byte)Math.Clamp(gray[i] * 255f / (level * white), 0, 254) : (byte)255;
-                }
+                if (smooth[i] >= white * level) result[i] = strokes[i] ? (byte)Math.Clamp(gray[i] * 255f / (level * white), 0, 254) : (byte)255;
                 else result[i] = (byte)Math.Clamp(smooth[i] * 255f / (level * white), 0, 254);
             }
         });
@@ -413,25 +409,81 @@ public static class PageBackground
         }
     }
 
-    /// <summary>The darkest of the averages along four directions through a pixel: low only on a line, even a thin faint one.</summary>
-    private static float DarkestAverage(byte[] gray, int width, int height, int x, int y, int step)
+    /// <summary>Blocks reached from the lightest ones through neighbours close in level, never through a picture.</summary>
+    private static bool[] PaperBlocks(float[] levels, bool[] picture, float paper, int cols, int rows)
     {
-        var darkest = float.MaxValue;
-        ReadOnlySpan<(int X, int Y)> directions = [(1, 0), (0, 1), (1, 1), (1, -1)];
-        foreach (var (dx, dy) in directions)
-        {
-            var sum = 0;
-            var n = 0;
-            for (var k = -StrokeSamples / 2; k <= StrokeSamples / 2; k++)
+        var known = new bool[levels.Length];
+        var stack = new Stack<int>();
+        for (var i = 0; i < levels.Length; i++)
+            if (!picture[i] && levels[i] >= paper - FlatBand)
             {
-                var (px, py) = (x + dx * k * step, y + dy * k * step);
-                if (px < 0 || py < 0 || px >= width || py >= height) continue;
-                sum += gray[py * width + px];
-                n++;
+                known[i] = true;
+                stack.Push(i);
             }
-            if (n >= 3) darkest = Math.Min(darkest, (float)sum / n);
+        while (stack.Count > 0)
+        {
+            var i = stack.Pop();
+            var (x, y) = (i % cols, i / cols);
+            if (x > 0) Visit(i - 1, i);
+            if (x < cols - 1) Visit(i + 1, i);
+            if (y > 0) Visit(i - cols, i);
+            if (y < rows - 1) Visit(i + cols, i);
         }
-        return darkest;
+        return known;
+
+        void Visit(int n, int from)
+        {
+            if (known[n] || picture[n] || levels[n] < 0.55f * paper || Math.Abs(levels[n] - levels[from]) > MaxStep * levels[from]) return;
+            known[n] = true;
+            stack.Push(n);
+        }
+    }
+
+    /// <summary>
+    /// Pixels on a line of faint ink a median would smooth away: darker than the paper by more than the noise, in a connected run
+    /// too long for chance (a hairline, hard pencil, a signature's tail). Noise this far out of the paper's range is sparse, so it
+    /// rarely links up.
+    /// </summary>
+    private static bool[] Strokes(byte[] gray, int width, int height, PaperLevel.Map map, float contrast, int minPixels, CancellationToken cancel)
+    {
+        var candidate = new bool[gray.Length];
+        Parallel.For(0, height, new ParallelOptions { CancellationToken = cancel }, y =>
+        {
+            for (var x = 0; x < width; x++)
+                candidate[y * width + x] = gray[y * width + x] < map.At(x, y) - contrast;
+        });
+        var strokes = new bool[gray.Length];
+        var seen = new bool[gray.Length];
+        var stack = new Stack<int>();
+        var run = new List<int>();
+        for (var start = 0; start < gray.Length; start++)
+        {
+            if (start % width == 0) cancel.ThrowIfCancellationRequested();
+            if (!candidate[start] || seen[start]) continue;
+            run.Clear();
+            seen[start] = true;
+            stack.Push(start);
+            while (stack.Count > 0)
+            {
+                var i = stack.Pop();
+                run.Add(i);
+                var (x, y) = (i % width, i / width);
+                // Two pixels away still counts: a pencil line has gaps in its grain.
+                for (var dy = -2; dy <= 2; dy++)
+                    for (var dx = -2; dx <= 2; dx++)
+                    {
+                        var (nx, ny) = (x + dx, y + dy);
+                        if (nx < 0 || ny < 0 || nx >= width || ny >= height) continue;
+                        var n = ny * width + nx;
+                        if (seen[n] || !candidate[n]) continue;
+                        seen[n] = true;
+                        stack.Push(n);
+                    }
+            }
+            if (run.Count >= minPixels)
+                foreach (var i in run) strokes[i] = true;
+        }
+        return strokes;
     }
 }
 
@@ -560,35 +612,40 @@ public static class Descreen
         var mean = (double)sum / n;
         if (squares / (double)n - mean * mean < MinVariance) return 0;
 
-        var across = FirstPeak(block, maxLag, Samples, (line, i) => gray[(y0 + (line * 2 + 1) * block / (Samples * 2)) * width + x0 + i], mean);
+        var across = FirstPeak(block, maxLag, Samples, (line, i) => gray[(y0 + (line * 2 + 1) * block / (Samples * 2)) * width + x0 + i]);
         if (across == 0) return 0;
-        var down = FirstPeak(block, maxLag, Samples, (line, i) => gray[(y0 + i) * width + x0 + (line * 2 + 1) * block / (Samples * 2)], mean);
+        var down = FirstPeak(block, maxLag, Samples, (line, i) => gray[(y0 + i) * width + x0 + (line * 2 + 1) * block / (Samples * 2)]);
         if (down == 0 || Math.Max(across, down) > 2 * Math.Min(across, down)) return 0;
         return Math.Max(across, down);
     }
 
-    /// <summary>The first lag of at least 2 where sample lines correlate with themselves, at a local peak of correlation; 0 when none.</summary>
-    private static int FirstPeak(int length, int maxLag, int lines, Func<int, int, byte> at, double mean)
+    /// <summary>The first lag of at least 2 where sample lines correlate with themselves, at a local peak of correlation; 0 when none. Each line is measured against its own mean, so a line of one level says nothing.</summary>
+    private static int FirstPeak(int length, int maxLag, int lines, Func<int, int, byte> at)
     {
         var limit = Math.Min(maxLag + 1, length / 3);
         Span<double> r = stackalloc double[limit + 1];
+        Span<double> values = stackalloc double[length];
         double energy = 0;
         for (var line = 0; line < lines; line++)
+        {
+            double mean = 0;
+            for (var i = 0; i < length; i++) mean += values[i] = at(line, i);
+            mean /= length;
             for (var i = 0; i < length; i++)
             {
-                var d = at(line, i) - mean;
-                energy += d * d;
+                values[i] -= mean;
+                energy += values[i] * values[i];
             }
-        if (energy <= 0) return 0;
-        for (var lag = 1; lag <= limit; lag++)
-        {
-            double s = 0;
-            for (var line = 0; line < lines; line++)
-                for (var i = 0; i + lag < length; i++) s += (at(line, i) - mean) * (at(line, i + lag) - mean);
-            r[lag] = s / energy * length / (length - lag);
+            for (var lag = 1; lag <= limit; lag++)
+            {
+                double s = 0;
+                for (var i = 0; i + lag < length; i++) s += values[i] * values[i + lag];
+                r[lag] += s * length / (length - lag);
+            }
         }
+        if (energy < lines * length) return 0; // less than a level's variation
         for (var lag = 2; lag < limit; lag++)
-            if (r[lag] >= MinCorrelation && r[lag] > r[lag - 1] && r[lag] >= r[lag + 1]) return lag;
+            if (r[lag] / energy >= MinCorrelation && r[lag] > r[lag - 1] && r[lag] >= r[lag + 1]) return lag;
         return 0;
     }
 
