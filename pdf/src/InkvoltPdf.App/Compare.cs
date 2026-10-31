@@ -168,6 +168,7 @@ internal static class Comparing
     internal static async Task<CompareSide?> LoadFile(MainWindow owner, string path)
     {
         var name = Path.GetFileName(path);
+        if (!path.EndsWith(".pdf", StringComparison.OrdinalIgnoreCase) && !ProGate.Check(owner, ProFeature.CompareOfficeAndScans)) return null;
         if (OfficeFiles.AppFor(path) is { } app)
         {
             if (OfficeConverter.Precheck(path, app) is { } problem)

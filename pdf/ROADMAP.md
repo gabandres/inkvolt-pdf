@@ -67,7 +67,7 @@ there are business users.
 | 2.5 What's in this PDF | All of it (the privacy promise) | |
 | 3.1 Translate side by side | All of it (it uses the user's own AI) | |
 | 3.2 Export to PowerPoint and HTML | All of it | |
-| 3.3 Compare Office files, scans, formatting | Comparing two PDFs (today) | Office files and scans against a PDF, formatting changes, the change report |
+| 3.3 Compare Office files, scans, formatting | Comparing two PDFs, moves, the overlay and lining up scans, the annotated copy (it was free already, so it stays free) | Office files and scans against a PDF, formatting changes |
 | 3.4 Long-term validation for signatures | Verifying | Adding LTV data, certifying with field locks |
 | 3.5 Indexed folder search | Searching open documents | Indexing folders and searching them |
 | 3.6 Speed on huge files | All of it | |

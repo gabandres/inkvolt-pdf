@@ -380,8 +380,9 @@ internal sealed class CompareWindow : Window
             (_oldScan, _newScan) = ([.. pages[0].Select(p => p.IsPicture)], [.. pages[1].Select(p => p.IsPicture)]);
 
             var (oldRead, newRead) = await ReadScansAsync(oldEngine, pages[0], newEngine, pages[1], cancel);
-            var oldSource = CompareSource.Of(pages[0], oldRead);
-            var newSource = CompareSource.Of(pages[1], newRead);
+            var formatting = Pro.Allows(ProFeature.CompareOfficeAndScans);
+            var oldSource = CompareSource.Of(pages[0], oldRead, formatting);
+            var newSource = CompareSource.Of(pages[1], newRead, formatting);
             (_oldText, _newText) = ([.. oldSource.Pages], [.. newSource.Pages]);
 
             SetBusy("Comparing…");
@@ -417,6 +418,11 @@ internal sealed class CompareWindow : Window
         var todo = Enumerable.Range(0, oldPages.Length).Where(p => oldPages[p].IsPicture && oldPages[p].Text.IsEmpty).Select(p => (Pdf: oldEngine, Page: p, Into: oldRead))
             .Concat(Enumerable.Range(0, newPages.Length).Where(p => newPages[p].IsPicture && newPages[p].Text.IsEmpty).Select(p => (Pdf: newEngine, Page: p, Into: newRead))).ToList();
         if (todo.Count == 0) return (oldRead, newRead);
+        if (!Pro.Allows(ProFeature.CompareOfficeAndScans))
+        {
+            _scanNote = Pro.Locked(ProFeature.CompareOfficeAndScans);
+            return (oldRead, newRead);
+        }
         if (PageOcr.For(AppSettings.Current.OcrLanguage) is not { } ocr)
         {
             _scanNote = "Scans weren't read: " + PageOcr.Unavailable;

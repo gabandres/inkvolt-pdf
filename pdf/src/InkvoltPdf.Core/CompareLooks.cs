@@ -110,8 +110,9 @@ public sealed record CompareSource(IReadOnlyList<PageText> Pages, IReadOnlyList<
     /// A document as read for Compare, with what was recognized on its scans in place of the pages' text (null where a page
     /// wasn't). A scan says nothing about formatting: an OCR layer's font and size aren't what the page shows.
     /// </summary>
-    public static CompareSource Of(IReadOnlyList<ComparePage> pages, IReadOnlyDictionary<int, PageText>? recognized = null) =>
+    /// <param name="formatting">Whether formatting is compared at all.</param>
+    public static CompareSource Of(IReadOnlyList<ComparePage> pages, IReadOnlyDictionary<int, PageText>? recognized = null, bool formatting = true) =>
         new([.. pages.Select((p, i) => recognized is not null && recognized.TryGetValue(i, out var read) ? read : p.Text)],
-            [.. pages.Select(p => p.IsPicture ? null : p.Looks)],
+            formatting ? [.. pages.Select(p => p.IsPicture ? null : p.Looks)] : null,
             [.. pages.Select(p => p.IsPicture)]);
 }

@@ -212,6 +212,18 @@ public class CompareContractTests
     }
 
     [Fact]
+    public void WithoutFormattingOnlyTheWordingAndMovesAreListed()
+    {
+        static CompareSource Plain(byte[] pdf)
+        {
+            using var engine = PdfEngine.Open(pdf, MuPDFCore.InputFileTypes.PDF, null);
+            return CompareSource.Of([.. Enumerable.Range(0, engine.PageCount).Select(p => engine.GetComparePage(p))], formatting: false);
+        }
+        var r = DocumentCompare.Run(Plain(File.ReadAllBytes(Data("compare-contract-old.pdf"))), Plain(File.ReadAllBytes(Data("compare-contract-new.pdf"))));
+        Assert.Equal((8, 5, 5, 4, 0), (r.Changed, r.Inserted, r.Deleted, r.Moved, r.Formatted));
+    }
+
+    [Fact]
     public void TheLooksLineUpWithThePageTextOnEveryPage()
     {
         using var engine = PdfEngine.Open(File.ReadAllBytes(Data("compare-contract-new.pdf")), MuPDFCore.InputFileTypes.PDF, null);
