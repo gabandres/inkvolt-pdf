@@ -26,13 +26,13 @@ public sealed record LtvAddress(LtvAddressKind Kind, string Url, string ForWhom,
 /// <param name="Complete">The file already holds everything: nothing needs asking.</param>
 public sealed record LtvPlan(IReadOnlyList<LtvAddress> Addresses, IReadOnlyList<string> Notes, bool Complete)
 {
-    /// <summary>A plain line for each kind of address: what the far end gets.</summary>
     /// <summary>
     /// The server the timestamp field starts with, until the person enters another: free, answers over https (checked
     /// 2026-10-31; DigiCert's, SSL.com's and GlobalSign's answer only over http). Nothing is sent unless they ask for a timestamp.
     /// </summary>
     public const string SuggestedTimestampServer = "https://timestamp.sectigo.com";
 
+    /// <summary>A plain line for each kind of address: what the far end gets.</summary>
     public static string WhatIsSent(LtvAddressKind kind) => kind switch
     {
         LtvAddressKind.Ocsp => "is told which certificate is being asked about (its serial number and a hash of its issuer)",
