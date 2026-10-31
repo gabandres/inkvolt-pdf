@@ -24,6 +24,17 @@ directly in `/Annots`. Inkvolt PDF for Mac 1.4.0 ships it. First thing when the 
   hostile PDF, an MSIX install, network drives, OneDrive placeholders. One run took 569 s to index, not explained; a two-word phrase
   takes 3-4 s to list 500 pages.
 
+**Under way (owner's go, 2026-10-31).** Print wave 2, the three items no hardware is needed for, one branch each, not merged, pushed to
+origin as backups (they may be unfinished: each commit message says):
+- 2.6 Fleet page: `worktree-agent-aa5ca6a254c1712da`
+- 2.4 Batch print: `worktree-agent-aafc822e7ecd8b955`
+- 2.3 Scan cleanup and Unicode OCR layer: `worktree-agent-a7bfaa97044299e39`
+
+Resume: finish each against `print/ROADMAP.md`, run `dotnet test Inkvolt.slnx`, merge to master. Expect small conflicts in the docs and
+`SupplyHistoryCsv.cs`, which 2.6 and 2.4 both touched. Run a review for hostile input before any release, since the last two reviews found
+18 bugs in code whose tests passed. Then 2.1, 2.2 and 2.5, whose code and simulators can be done away from hardware, each needing a
+real printer or scanner to finish.
+
 **Next (Windows).** Print waves 2-3, Report a problem, WIA PDF-only scanners,
 TWAIN and black-and-white in Scan, 3.1, 2.1 leftovers, UX still-short items.
 
