@@ -22,6 +22,10 @@ locality) are used in their usual sense: the interface is everything a caller mu
   permissions, through an edit.
 - **Signed edit** (`Core/SignedEdits.cs`): an edit of a signed document is appended after the signed bytes when it can
   be; otherwise it needs the user's consent to rewrite the file.
+- **Long-term data** (`Core/Ltv.cs`, `Core/Dss.cs`): the certificates, OCSP answers and CRLs a signature will need when it is
+  checked years from now, stored in the file's /DSS as an incremental update. `LtvClient` is the one way online for it, and what it
+  will contact is listed first (`LtvPlan`). `RevocationPool` holds such data while a check judges it, as hostile until its signature
+  checks out; `LongTermCheck` says what a signature's level is from what the file holds, and goes nowhere.
 - **Simple shape** (`ExportShape`, `Core/ExportShapes.cs`): a line, rectangle or ellipse a page draws, which becomes a shape on
   a PowerPoint slide. MuPDF reports only a path's bounds, so what the rendered page shows decides; any other path stays a
   picture.

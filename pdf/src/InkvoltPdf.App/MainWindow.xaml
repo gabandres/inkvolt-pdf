@@ -265,6 +265,8 @@
                                     <MenuItem Command="app:Cmd.ShowLayers" />
                                     <MenuItem Command="app:Cmd.ShowSignatures" />
                                     <MenuItem x:Name="SignMenu" Command="app:Cmd.Sign" />
+                                    <MenuItem Command="app:Cmd.AddVerification" />
+                                    <MenuItem Command="app:Cmd.CheckSignaturesOnline" />
                                     <Separator />
                                     <MenuItem Command="app:Cmd.Highlight" />
                                     <MenuItem Command="app:Cmd.Underline" />

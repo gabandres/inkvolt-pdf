@@ -1522,7 +1522,8 @@ public partial class DocumentTab : UserControl, IDisposable
                 else LayerTree.Focus();
                 break;
             case NavPaneKind.Signatures:
-                if (FirstFocusable(SignatureList) is { } sig) sig.Focus();
+                if (SigAddVerification.IsEnabled) SigAddVerification.Focus();
+                else if (FirstFocusable(SignatureList) is { } sig) sig.Focus();
                 else PagesRail.Focus();
                 break;
             default:

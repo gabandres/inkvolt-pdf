@@ -22,6 +22,9 @@ public enum ProFeature
 
     /// <summary>Save as PDF/A-2a (tagged, PDF/UA identifier kept), in the app and in Batch.</summary>
     AccessibleOutput,
+
+    /// <summary>Adding long-term validation data and document timestamps, when signing and to signed files (verifying stays free).</summary>
+    LongTermValidation,
 }
 
 /// <summary>
@@ -76,6 +79,7 @@ public static class Pro
         ProFeature.AutoTagging => "Make Accessible",
         ProFeature.ReadingOrder => "Reading order",
         ProFeature.AccessibleOutput => "Accessible PDF/A-2a",
+        ProFeature.LongTermValidation => "Long-term validation",
         _ => "Command line",
     };
 
@@ -87,6 +91,7 @@ public static class Pro
         ProFeature.AutoTagging => "Tag a PDF for screen readers on this PC, nothing sent anywhere: headings, paragraphs, lists, tables and pictures read from the pages, running headers and page numbers set aside, the title and language set; in Batch over many files too.",
         ProFeature.ReadingOrder => "See the order a screen reader follows as numbered boxes on the page, move pieces up, down or to another page, change what a piece is, and write the tags again.",
         ProFeature.AccessibleOutput => "Save a tagged PDF as PDF/A-2a, the archival format that keeps the tags and says it is accessible (PDF/UA); in Batch too.",
+        ProFeature.LongTermValidation => "Keep signatures checkable for decades: store in the file the proof that each certificate was good when it signed (PAdES B-LT), add a document timestamp over it (B-LTA), and do the same for files signed earlier. You see which addresses are asked before anything goes online.",
         _ => "inkvoltpdf --batch runs a preset on files or folders without a window; inkvoltpdf --watch watches a folder from a terminal or a scheduled task.",
     };
 
@@ -98,6 +103,7 @@ public static class Pro
         ProFeature.AutoTagging => "Make Accessible is part of Inkvolt Pro.",
         ProFeature.ReadingOrder => "Fixing the reading order is part of Inkvolt Pro.",
         ProFeature.AccessibleOutput => "Saving accessible PDF/A-2a files is part of Inkvolt Pro.",
+        ProFeature.LongTermValidation => "Adding long-term validation data is part of Inkvolt Pro.",
         _ => "The command line is part of Inkvolt Pro.",
     };
 

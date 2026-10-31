@@ -25,6 +25,8 @@ public sealed class FormDialog : Window
         Title = title;
         Width = width;
         SizeToContent = SizeToContent.Height;
+        // A long form on a small screen scrolls; its buttons stay on screen.
+        MaxHeight = SystemParameters.WorkArea.Height;
         ResizeMode = ResizeMode.NoResize;
         ShowInTaskbar = false;
         WindowStartupLocation = WindowStartupLocation.CenterOwner;
@@ -69,7 +71,7 @@ public sealed class FormDialog : Window
         var root = new DockPanel();
         DockPanel.SetDock(footer, Dock.Bottom);
         root.Children.Add(footer);
-        root.Children.Add(body);
+        root.Children.Add(new ScrollViewer { Content = body, VerticalScrollBarVisibility = ScrollBarVisibility.Auto, Focusable = false });
         Content = root;
     }
 

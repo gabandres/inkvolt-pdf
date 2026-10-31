@@ -529,7 +529,29 @@ Pro… window: done 2026-10-30 (`mac/InkvoltPdfKit/Sources/PdfCore/Pro.swift`, `
   (PAdES B-LT, B-LTA); Add Verification Information works on any signed file; DocMDP and FieldMDP are enforced when
   verifying. Test: Acrobat shows "LTV enabled" and the EU DSS validator reports B-LTA for our signed files.
 - **Effort** M. Windows; Mac with signatures (verifying and signing came with E2, 2026-10-30, DocMDP and FieldMDP enforced
-  as on Windows; the long-term data is still to do on both).
+  as on Windows; the long-term data is still to do there).
+- **Now.** Windows done 2026-10-31. Sign Digitally can store OCSP answers or CRLs for the whole chain and its timestamp's (/DSS, /VRI)
+  and add a document timestamp (B-LT, B-LTA). Add Verification Information does it to any signed file as incremental updates, the earlier
+  bytes as they were and each signature re-verified before the result is handed back; a signature with no timestamp takes two document
+  timestamps, one for its time and one over the data, which is what EU DSS asks. Signatures followed only by such data still read as valid.
+  Pro: adding the data (`ProFeature.LongTermValidation`); free: verifying, the level shown, and Check Signatures Online, which asks without
+  changing the file. Going online happens only through `LtvClient`, after a window listing every address and what it gets: https for the
+  timestamp server the person enters (the DigiCert default is gone), the certificates' own OCSP, CRL and issuer URLs as they name them,
+  nothing private, loopback or link-local by name, by DNS answer (checked on the connection made) or by redirect, no proxy, 15 s and a
+  size limit per request. **Opening a signed file used to go online by itself** (revocation, and Windows fetching missing issuers from what
+  a file's certificates name, a way for a file to probe the local network): it no longer does, and signing no longer does either.
+  DocMDP and FieldMDP were enforced as said; added: every FieldMDP reference counts, a locked field's appearance, other properties or a new
+  field of its name count as changes. A hostile /DSS (wrong shapes, loops, zip bombs, thousands of entries, forged answers) reads as no data.
+  **Checked:** `LtvTests` against a generated CA with a local OCSP responder, CRLs, issuer certificates and RFC 3161 server, none of it needing
+  the internet. EU DSS 6.5.1 run locally and offline (`tools/pades-check`, opt-in `INKVOLTPDF_PADES_CHECK`) reports PAdES-BASELINE-LTA, TOTAL_PASSED,
+  for B-LTA signing, Add Verification Information on a B-B file and on a no-changes certification, CRLs only, and a delegated responder;
+  PAdES-BASELINE-LT, TOTAL_PASSED, for B-LT; and -B and -T for the plain ones. The real app, driven with `--script` against the local authority,
+  added, checked and signed, its files reading B-LTA (`The_real_app_adds_checks_and_signs`). No file went to an online validator.
+  **Not checked:** Acrobat's "LTV enabled" (Acrobat isn't on this PC; `tools/pades-check` says how, by hand). Real certificate authorities and
+  timestamp servers: every run was against the generated one, so a real CA's OCSP answers older than a fresh timestamp (issued ahead by a CDN) are
+  handled only as far as "still in force at that time" in our own check; EU DSS may ask for a later one. Smart cards.
+  **Still to do:** the Mac. Certifying with a choice of fields to lock (Pro in the table above) isn't built; a signature field's own /Lock is
+  honored. Encrypted files are refused, since `Incremental` can't append to them. Batch has no long-term action.
 
 ### 3.5 Indexed folder search
 - **Leader.** Acrobat Pro's catalog: a full-text index (.pdx) over a folder, searched in Advanced Search

@@ -169,6 +169,8 @@ public static class Cmd
     public static readonly RoutedUICommand ShowLayers = Make("_Layers", nameof(ShowLayers));
     public static readonly RoutedUICommand ShowSignatures = Make("_Signatures", nameof(ShowSignatures));
     public static readonly RoutedUICommand Sign = Make("Sign _Digitally…", nameof(Sign));
+    public static readonly RoutedUICommand AddVerification = Make("Add _Verification Information…", nameof(AddVerification));
+    public static readonly RoutedUICommand CheckSignaturesOnline = Make("Check Si_gnatures Online…", nameof(CheckSignaturesOnline));
     public static readonly RoutedUICommand Highlight = Make("_Highlight Text", nameof(Highlight), K(Key.H, ModifierKeys.Control | ModifierKeys.Shift));
     public static readonly RoutedUICommand Underline = Make("_Underline Text", nameof(Underline), K(Key.U, ModifierKeys.Control | ModifierKeys.Shift));
     public static readonly RoutedUICommand StrikeOut = Make("_Strike Out Text", nameof(StrikeOut), K(Key.X, ModifierKeys.Control | ModifierKeys.Shift));

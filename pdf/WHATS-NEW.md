@@ -9,6 +9,11 @@ Each release gets a `## x.y.z` heading before it's packed (`packaging/pack-msix.
 - Compare lists formatting changes (font, size, bold, italic, color) and moved paragraphs apart from changes of wording, and leaves running headers and footers out. Tick off any kind to hide it.
 - Scans are lined up before they are overlaid, so a page fed a little crooked no longer looks different all over.
 - The annotated copy now also marks moves, formatting and areas that look different, such as a picture that was swapped.
+- Long-term validation: Add Verification Information stores in a signed file the proof that each certificate was good, so its signatures can still be checked after the certificates expire. It can add a document timestamp too (PAdES B-LTA), and Sign Digitally can do all of it as it signs. It's part of Inkvolt Pro.
+- Before any of that goes online, you see every address that will be contacted and what it gets. Addresses on your PC or local network are never contacted, whatever a file's certificates say.
+- Opening a signed file no longer goes online at all, where it used to check revocation by itself. Check Signatures Online does it when you ask, and a signature's details now say what the file holds for checking it later.
+- There is no default timestamp server any more: you enter the one you choose, and it must use https.
+- A locked form field's appearance swapped in a later update now shows as a change the signature doesn't allow, not only a changed value.
 
 ## 1.4.0
 - Save as PDF/A now works on IRS forms and on documents with Fill & Sign check marks, which it used to refuse. The list of changes says what the copy lost or gained: the form's Reader usage rights, and check marks drawn in a slightly different shape.

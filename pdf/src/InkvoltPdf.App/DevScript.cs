@@ -26,14 +26,14 @@ namespace InkvoltPdf.App;
 /// suspectfix text|keep · findcount word (how often search finds it) · rosel i|pic · romove i by · ropage i by · roshow by · roalt text · rodecorative · roapply · pdfa2a (with
 /// <c>savepath</c>) · attachments · attach path · extract i path · open-attachment i · remove-attachment i ·
 /// layers · layer name on|off · sigs · bars · labels · gotopage label · title · open path · pane-state</c>. Signing:
-/// <c>makepfx path password name · sign pfx password [box p x y w h | field name | invisible] [ts url] · addsig p x y ·
+/// <c>makepfx path password name · sign pfx password [box p x y w h | field name | invisible] [ts url] [lt|lta] · ltvloopback tsaurl · addvri · checkonline · levels · addsig p x y ·
 /// movesig i p x y w h · delsig i</c> (these two move any placed signature or picture). Pictures and links: <c>addimage p x y file ·
 /// placed · tool link · linktarget url|#page|cancel · addlink p x y w h · links · selectlink i|none · editlink i · movelink i p x y w h · dellink i</c>.
 /// Stamps: <c>addstamp p x y Approved|Rejected|…|approvedby|custom:file</c> (moved and deleted with movesig / delsig). Inkvolt suite: <c>scandialog</c> (the open Scan dialog's scanners and choices) <c>·
 /// scanselect text · scanchoose glass|feeder|duplex Color|Grayscale|BlackAndWhite dpi</c> (choose the open Scan dialog's scanner and settings; "-" keeps one) <c>·
 /// scanpage file.jpg [dpi]</c> (give the open Scan dialog a page, as if scanned) <c>·
 /// printercheck queue[|port]</c> (printer status for a Windows queue) <c>· inkvolt</c> (is Inkvolt Print found). Create PDF: <c>convert path · webpage address|file · converters</c>. PDF/A: <c>pdfa</c> (with <c>savepath</c>). Measuring: <c>measure distance|perimeter|area|calibrate p x1 y1 … · setscale ratio [all] · measurements</c>, <c>tool measure-distance|measure-perimeter|measure-area</c>. Batch: <c>batch [paths] · batchadd · batchstep · batchout · batchoption · batchpw · batchrun · batchshot · batchstate · batchclose ·
-/// presetsave name · presetload name · watch folder;preset · watchshot out.png · watchstate</c>. Inkvolt Pro: <c>prowindow [presets|watched|cli|tag|ro|pdfa2a] ·
+/// presetsave name · presetload name · watch folder;preset · watchshot out.png · watchstate</c>. Inkvolt Pro: <c>prowindow [presets|watched|cli|tag|ro|pdfa2a|ltv] ·
 /// pro key|remove · proenforce on|off · proshot out.png · prostate</c>. Split view: <c>split h|v|off · switchpane · splitstate</c>. AI assistant (no network): <c>aiconfig Ollama|LMStudio|url model [context] · aioff ·
 /// aifake answer text|error401|refused|missing · aipane on|off · aisummarize all|range · aiask question · aiexplain · aistate ·
 /// dialogfill check0=on … [expand]</c>. Store updates (no Store): <c>updatefake none|ready|mandatory|error · updatecheck [startup] · updatestate</c>. Compare: <c>compare old.pdf new.pdf ·
@@ -441,6 +441,16 @@ internal static class DevScript
                 log.Add($"signatures: {tab!.SignatureResults.Count}, bar: {BarText(tab, "SigBar", "SigBarText")}");
                 foreach (var s in tab.SignatureResults) log.Add($"  {s.FieldName}: {s.Status} signer={s.SignerName} trusted={s.CertificateTrusted} brokenByEdits={tab.BrokenByEdits(s)}: {DocumentTab.SignatureSummary(s, tab.BrokenByEdits(s))}");
                 break;
+            case "ltvloopback":
+                // Long-term validation against a local authority: lets this run's clients reach this PC's loopback, as nothing else does.
+                window.DevLtvClient = () => new Core.LtvClient(allowLoopback: true, allowHttpTimestamp: true);
+                AppSettings.Current.TimestampUrl = arg;
+                break;
+            case "addvri": await window.AddVerificationAsync(tab!); log.Add($"long-term: {tab!.DevLongTermOutcome}"); break;
+            case "checkonline": await window.CheckSignaturesOnlineAsync(tab!); await Task.Delay(800); log.Add($"long-term: {tab!.DevLongTermOutcome}"); break;
+            case "levels":
+                foreach (var s in tab!.SignatureResults) log.Add($"  {s.FieldName}: {s.Status} {s.LongTerm?.Level} {s.LongTerm?.Summary}");
+                break;
             case "makepfx":
             {
                 // makepfx <path> <password> <name>: a self-signed personal ID as a file (never touches the certificate store).
@@ -458,10 +468,11 @@ internal static class DevScript
                 Viewer.SignaturePlacement? box = null;
                 var visible = true;
                 var ts = Array.IndexOf(a, "ts");
+                var longTerm = a.Contains("lta") ? LongTermLevel.Lta : a.Contains("lt") ? LongTermLevel.Lt : LongTermLevel.None;
                 if (a.Length > 2 && a[2] == "box") box = new Viewer.SignaturePlacement(int.Parse(a[3]) - 1, new Core.RectD(Num(a[4]), Num(a[5]), Num(a[6]), Num(a[7])));
                 else if (a.Length > 2 && a[2] == "field") field = a[3];
                 else visible = false;
-                var choice = new SignChoice(cert, "I approve this document", "Dev script", visible, new Core.SignatureLook(), ts > 0, ts > 0 ? a[ts + 1] : "", Core.CertificationLevel.None);
+                var choice = new SignChoice(cert, "I approve this document", "Dev script", visible, new Core.SignatureLook(), ts > 0, ts > 0 ? a[ts + 1] : "", Core.CertificationLevel.None, longTerm);
                 await window.SignDigitallyAsync(tab!, field, choice, box);
                 log.Add($"signed: dirty={tab!.Session.IsDirty} file={tab.Session.DisplayName}");
                 break;
@@ -1170,7 +1181,7 @@ internal static class DevScript
             // Inkvolt Pro: prowindow [presets|watched|cli|tag|ro|pdfa2a] (Help › Inkvolt Pro, or as a locked feature opens it) · pro <key>|remove (enter or
             // remove a key in that window) · proenforce on|off (the gate, to see the locked views) · proshot out.png · prostate
             case "prowindow":
-                ProWindow.Open(window, arg switch { "presets" => ProFeature.BatchPresets, "watched" => ProFeature.WatchedFolders, "cli" => ProFeature.CommandLine, "tag" => ProFeature.AutoTagging, "ro" => ProFeature.ReadingOrder, "pdfa2a" => ProFeature.AccessibleOutput, _ => null });
+                ProWindow.Open(window, arg switch { "presets" => ProFeature.BatchPresets, "watched" => ProFeature.WatchedFolders, "cli" => ProFeature.CommandLine, "tag" => ProFeature.AutoTagging, "ro" => ProFeature.ReadingOrder, "pdfa2a" => ProFeature.AccessibleOutput, "ltv" => ProFeature.LongTermValidation, _ => null });
                 await Task.Delay(300);
                 break;
             case "pro" when arg == "remove": ProWindow.Open(window, null).DevRemove(); break;

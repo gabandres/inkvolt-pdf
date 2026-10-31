@@ -372,7 +372,9 @@ public sealed class AppSettings
     public string SignImage { get; set; } = "";
     /// <summary>Add an RFC 3161 timestamp (sends only a hash of the signature to <see cref="TimestampUrl"/>).</summary>
     public bool SignTimestamp { get; set; }
-    public string TimestampUrl { get; set; } = "http://timestamp.digicert.com";
+    public string TimestampUrl { get; set; } = "";
+    /// <summary>Long-term validation when signing (<see cref="LongTermLevel"/>).</summary>
+    public int SignLongTerm { get; set; }
     /// <summary>Scan dialog (Inkvolt suite): the last scanner (a network one's UUID, "wia:…" or "twain:…") and the choices made for it.</summary>
     public string ScanDevice { get; set; } = "";
     public string ScanSource { get; set; } = "";
