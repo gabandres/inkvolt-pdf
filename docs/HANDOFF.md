@@ -7,8 +7,7 @@ GlobalSign when probed); not yet confirmed that Acrobat trusts its timestamps. T
 certificate checks, the Mac's AI assistant). The folder index keeps a changed file's old text about 2 minutes until compaction: accepted
 for now, though just-redacted text lingers on the PC that long.
 
-**Released.** Inkvolt PDF 1.5.0.0: submitted to the Store on 2026-10-31 (`msstore submission status 9MXDTSFJ9W28`), GitHub release
-`pdf-v1.5.0.0`. When the Store publishes it, update the website and README's link as for 1.4.0. It holds the three below, with two
+**Released.** Inkvolt PDF 1.5.0.0: published in the Store on 2026-10-31, GitHub release `pdf-v1.5.0.0`, website updated. It holds the three below, with two
 pre-release reviews' fixes; each has its checks and limits in `pdf/ROADMAP.md`. The smoke test failed once on the Word step and passed on
 the same package when run again: the run started at 13:16 and failed at 13:53, past its 4-minute limit, so the PC most likely slept.
 The bench ran on battery: `text.pdf` scrolled at 54 fps, under the target and down from 75, which could be the battery; check on mains.
