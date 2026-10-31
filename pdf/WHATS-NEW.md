@@ -9,6 +9,7 @@ Each release gets a `## x.y.z` heading before it's packed (`packaging/pack-msix.
 - Compare lists formatting changes (font, size, bold, italic, color) and moved paragraphs apart from changes of wording, and leaves running headers and footers out. Tick off any kind to hide it.
 - Scans are lined up before they are overlaid, so a page fed a little crooked no longer looks different all over.
 - The annotated copy now also marks moves, formatting and areas that look different, such as a picture that was swapped.
+- Search Folders (Edit menu, Ctrl+Alt+Shift+F): find a word in every PDF of a folder in a moment, with the text around each hit, and open the file right at it. Inkvolt PDF indexes the folder in the background, on your PC, and keeps up as files change. Files it can't read are skipped and listed.
 
 ## 1.4.0
 - Save as PDF/A now works on IRS forms and on documents with Fill & Sign check marks, which it used to refuse. The list of changes says what the copy lost or gained: the form's Reader usage rights, and check marks drawn in a slightly different shape.

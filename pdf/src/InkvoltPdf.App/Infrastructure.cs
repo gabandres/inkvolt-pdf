@@ -407,6 +407,8 @@ public sealed class AppSettings
     public bool BatchRecursive { get; set; } = true;
     /// <summary>Watched folders (<c>FolderWatches</c>): watched while the app is open, started again when it starts.</summary>
     public List<WatchSetting> WatchedFolders { get; set; } = [];
+    /// <summary>Folders with a search index (<c>FolderSearches</c>): kept current while the app is open, started again when it starts.</summary>
+    public List<IndexedFolderSetting> IndexedFolders { get; set; } = [];
 
     public string PrintHandling { get; set; } = "Fit";
     public bool PrintFitToPaper { get; set; }
@@ -441,6 +443,13 @@ public sealed class AppSettings
         public string Folder { get; set; } = "";
         public string Preset { get; set; } = "";
         public string Output { get; set; } = "";
+        public bool Paused { get; set; }
+    }
+
+    /// <summary>A folder with a search index, paused by the user or not. The index itself is a file in the data folder.</summary>
+    public sealed class IndexedFolderSetting
+    {
+        public string Folder { get; set; } = "";
         public bool Paused { get; set; }
     }
 

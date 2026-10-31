@@ -33,11 +33,12 @@ namespace InkvoltPdf.App;
 /// scanselect text · scanchoose glass|feeder|duplex Color|Grayscale|BlackAndWhite dpi</c> (choose the open Scan dialog's scanner and settings; "-" keeps one) <c>·
 /// scanpage file.jpg [dpi]</c> (give the open Scan dialog a page, as if scanned) <c>·
 /// printercheck queue[|port]</c> (printer status for a Windows queue) <c>· inkvolt</c> (is Inkvolt Print found). Create PDF: <c>convert path · webpage address|file · converters</c>. PDF/A: <c>pdfa</c> (with <c>savepath</c>). Measuring: <c>measure distance|perimeter|area|calibrate p x1 y1 … · setscale ratio [all] · measurements</c>, <c>tool measure-distance|measure-perimeter|measure-area</c>. Batch: <c>batch [paths] · batchadd · batchstep · batchout · batchoption · batchpw · batchrun · batchshot · batchstate · batchclose ·
-/// presetsave name · presetload name · watch folder;preset · watchshot out.png · watchstate</c>. Inkvolt Pro: <c>prowindow [presets|watched|cli|tag|ro|pdfa2a] ·
+/// presetsave name · presetload name · watch folder;preset · watchshot out.png · watchstate</c>. Inkvolt Pro: <c>prowindow [presets|watched|cli|tag|ro|pdfa2a|foldersearch] ·
 /// pro key|remove · proenforce on|off · proshot out.png · prostate</c>. Split view: <c>split h|v|off · switchpane · splitstate</c>. AI assistant (no network): <c>aiconfig Ollama|LMStudio|url model [context] · aioff ·
 /// aifake answer text|error401|refused|missing · aipane on|off · aisummarize all|range · aiask question · aiexplain · aistate ·
 /// dialogfill check0=on … [expand]</c>. Store updates (no Store): <c>updatefake none|ready|mandatory|error · updatecheck [startup] · updatestate</c>. Compare: <c>compare old.pdf new.pdf ·
 /// compareshot out.png · comparemode text|visual · comparenext [n] · compareselect i · comparezoom percent|fit · comparegroup wording|moved|formatting|visual on|off · comparelist n · comparetext old|new page · comparestate · comparereport</c>.
+/// Search Folders: <c>foldersearch · indexadd folder · indexwait [s] · indexstate · indexsearch text · indexoption case|whole|accents on|off · indexopen i · indexpause on|off · indexremove · indexlatency ms · foldersearchshot out.png</c>.
 /// Prepare Form: <c>prepareform on|off · designkind text|check|radio|combo|list|signature|button|select · addfield kind p x y w h ·
 /// fieldsel i|none · fieldprop name|tooltip|default|options|format|required|size|fill value · movefield i x y w h ·
 /// fieldaction delete|duplicate|properties|accept|reject · detect · suggestion i · acceptall · designfields · designstate ·
@@ -1169,8 +1170,48 @@ internal static class DevScript
             case "watchstate": log.Add($"watch: {WatchWindow.Open(window).DevState()}; title '{FolderWatches.Summary}'"); break;
             // Inkvolt Pro: prowindow [presets|watched|cli|tag|ro|pdfa2a] (Help › Inkvolt Pro, or as a locked feature opens it) · pro <key>|remove (enter or
             // remove a key in that window) · proenforce on|off (the gate, to see the locked views) · proshot out.png · prostate
+            // Search Folders (with INKVOLTPDF_DATA set, or the index goes to the temp folder): foldersearch (the window, off-screen) · indexadd folder · indexwait [s]
+            // (until up to date) · indexstate · indexsearch text · indexoption case|whole|accents on|off · indexopen i (open result i at the hit: logs the tab's file, page and find bar) ·
+            // indexpause on|off · indexremove (the first folder) · indexlatency ms (the longest wait for the UI thread) · foldersearchshot out.png
+            case "foldersearch": FolderSearchWindow.Open(window, offScreen: true); break;
+            case "indexadd":
+                FolderSearches.Add(arg);
+                FolderSearchWindow.Open(window, offScreen: true).DevRefresh();
+                break;
+            case "indexwait": log.Add(await WaitForIndexes(arg.Length > 0 ? int.Parse(arg) : 600)); break;
+            case "indexstate": log.Add(FolderSearchWindow.Open(window, offScreen: true).DevState()); break;
+            case "indexsearch": log.Add(await FolderSearchWindow.Open(window, offScreen: true).DevSearch(arg)); break;
+            case "indexoption":
+            {
+                var a = arg.Split(' ');
+                FolderSearchWindow.Open(window, offScreen: true).DevOption(a[0], a[1] == "on");
+                break;
+            }
+            case "indexopen":
+            {
+                FolderSearchWindow.Open(window, offScreen: true).DevSelect(int.Parse(arg));
+                await Task.Delay(2000);
+                var t = window.ActiveTab;
+                log.Add($"indexopen: {Log.Name(t?.Session.FilePath)} page {t?.PageView.CurrentPage + 1} of {t?.PageView.PageCount}; find '{(t?.FindName("FindBox") as System.Windows.Controls.TextBox)?.Text}': {(t?.FindName("FindStatus") as System.Windows.Controls.TextBlock)?.Text}");
+                break;
+            }
+            case "indexpause":
+                foreach (var f in FolderSearches.All) f.SetPaused(arg == "on");
+                break;
+            case "indexremove": FolderSearches.Remove(FolderSearches.All[0]); break;
+            case "indexlatency":
+                log.Add($"indexlatency: at most {await FolderSearchWindow.Open(window, offScreen: true).DevLatency(int.Parse(arg)):0.0} ms waiting for the UI thread; {FolderSearches.All[0].StatusText}");
+                break;
+            case "foldersearchshot":
+            {
+                var w = FolderSearchWindow.Open(window, offScreen: true);
+                w.DevRefresh();
+                await Task.Delay(500);
+                Shot(w, arg);
+                break;
+            }
             case "prowindow":
-                ProWindow.Open(window, arg switch { "presets" => ProFeature.BatchPresets, "watched" => ProFeature.WatchedFolders, "cli" => ProFeature.CommandLine, "tag" => ProFeature.AutoTagging, "ro" => ProFeature.ReadingOrder, "pdfa2a" => ProFeature.AccessibleOutput, _ => null });
+                ProWindow.Open(window, arg switch { "presets" => ProFeature.BatchPresets, "watched" => ProFeature.WatchedFolders, "cli" => ProFeature.CommandLine, "tag" => ProFeature.AutoTagging, "ro" => ProFeature.ReadingOrder, "pdfa2a" => ProFeature.AccessibleOutput, "foldersearch" => ProFeature.FolderSearch, _ => null });
                 await Task.Delay(300);
                 break;
             case "pro" when arg == "remove": ProWindow.Open(window, null).DevRemove(); break;
@@ -1253,6 +1294,17 @@ internal static class DevScript
 
     /// <summary>The scripted answer to the next Add/Edit Link dialog (<c>linktarget</c>), if any (null = cancel).</summary>
     internal static bool TakeLinkTarget(out (string? Uri, int Page)? target) => LinkTargets.TryDequeue(out target);
+
+    private static async Task<string> WaitForIndexes(int seconds)
+    {
+        var waited = System.Diagnostics.Stopwatch.StartNew();
+        while (waited.Elapsed.TotalSeconds < seconds)
+        {
+            if (FolderSearches.All.All(f => f.Indexer?.Status.Phase is IndexerPhase.UpToDate or IndexerPhase.Paused)) break;
+            await Task.Delay(100);
+        }
+        return $"indexwait {waited.Elapsed.TotalSeconds:0.0} s: {string.Join(" | ", FolderSearches.All.Select(f => f.StatusText))}";
+    }
 
     private static void SetFindText(DocumentTab tab, string text)
     {

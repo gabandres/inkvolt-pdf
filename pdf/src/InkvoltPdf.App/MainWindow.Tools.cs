@@ -10,6 +10,7 @@ public partial class MainWindow
         BindAlways(Cmd.NewFromImages, () => _ = FileTools.NewFromImages(this));
         BindAlways(Cmd.NewFromClipboard, () => _ = FileTools.NewFromClipboard(this));
         BindAlways(Cmd.Compare, () => _ = Comparing.Start(this));
+        BindAlways(Cmd.SearchFolders, () => FolderSearchWindow.Open(this));
         BindAlways(Cmd.CreateFromOffice, () => _ = Converting.FromOfficeFile(this));
         BindAlways(Cmd.CreateFromWeb, () => _ = Converting.FromWebPage(this));
         Bind(Cmd.MeasureDistance, t => ToggleTool(t, Viewer.ViewerTool.MeasureDistance), t => !t.IsOrganizing && t.Session.IsPdf);
@@ -60,6 +61,19 @@ public partial class MainWindow
             foreach (var t in Tabs) t.RefreshAiPane();
             ShowStatus(AiActions.Describe());
         });
+    }
+
+    /// <summary>A result of Search Folders: the file comes to the front, at that page, with the find bar on what was searched for.</summary>
+    public async Task OpenFolderHit(string path, int page, string query, bool matchCase, bool wholeWords, bool ignoreAccents)
+    {
+        BringToFront();
+        await OpenFileAsync(path);
+        if (ActiveTab is not { } tab || !string.Equals(tab.Session.FilePath, System.IO.Path.GetFullPath(path), StringComparison.OrdinalIgnoreCase)) return;
+        // Once the new tab has its layout, so the page view can go there.
+        await Dispatcher.InvokeAsync(() =>
+        {
+            if (!tab.IsDisposed) tab.ShowFoundAt(page, query, matchCase, wholeWords, ignoreAccents);
+        }, System.Windows.Threading.DispatcherPriority.ContextIdle);
     }
 
     /// <summary>True when the AI assistant is set up; else offers its settings (saying why) and tells whether it is now.</summary>

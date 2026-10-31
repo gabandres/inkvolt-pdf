@@ -70,6 +70,7 @@ public static class Cmd
     public static readonly RoutedUICommand FindNext = Make("Find _Next", nameof(FindNext), K(Key.F3));
     public static readonly RoutedUICommand FindPrevious = Make("Find Pre_vious", nameof(FindPrevious), K(Key.F3, ModifierKeys.Shift));
     public static readonly RoutedUICommand SearchPane = Make("_Search Pane", nameof(SearchPane), K(Key.F, ModifierKeys.Control | ModifierKeys.Shift));
+    public static readonly RoutedUICommand SearchFolders = Make("Search Fo_lders…", nameof(SearchFolders), K(Key.F, ModifierKeys.Control | ModifierKeys.Alt | ModifierKeys.Shift));
     public static readonly RoutedUICommand ToolHand = Make("_Hand Tool", nameof(ToolHand));
     public static readonly RoutedUICommand ToolSelect = Make("Select _Text Tool", nameof(ToolSelect));
     public static readonly RoutedUICommand ToolSnapshot = Make("S_napshot Tool", nameof(ToolSnapshot));
