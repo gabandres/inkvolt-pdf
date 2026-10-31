@@ -528,6 +528,39 @@ public class BatchPrintTests
         Assert.DoesNotContain("\"x\"", job.ToString());
     }
 
+    [Fact]
+    public async Task Resuming_a_stopped_batch_sends_only_what_wasnt_sent_so_nothing_prints_twice()
+    {
+        using var f = new BatchFolder();
+        var lines = new List<BatchPrintLine>();
+        for (var i = 1; i <= 6; i++) lines.Add(await Line(f.File($"f{i}.pdf")));
+        var problem = true;
+        var queue = new FakeQueue { ProblemBefore = sent => problem && sent == 2 ? "Paper jam" : null };
+        var first = await Run(lines, queue);
+        problem = false;
+        var again = first.Items.Where(r => r.StillToSend).Select(r => lines[r.Index]).ToList();
+        var second = await Run(again, queue);
+        Assert.Equal(lines.Select(l => l.Name), queue.Sent.Select(j => j.Name));
+        Assert.Equal(4, second.Sent);
+        Assert.Empty(second.Items.Where(r => r.StillToSend));
+    }
+
+    [Fact]
+    public async Task A_file_that_may_have_reached_the_queue_isnt_sent_again_by_itself()
+    {
+        using var f = new BatchFolder();
+        var lines = new[] { await Line(f.File("a.pdf")), await Line(f.File("b.pdf")), await Line(f.File("c.pdf", "pages=2"), new BatchPrintSettings(Range: "9")) };
+        var summary = await Run(lines, new FakeQueue { FailOn = j => j.Name == "b.pdf" ? new BatchQueueException("The spooler stopped.", true) : null });
+        Assert.False(summary.Items[0].StillToSend); // sent
+        Assert.False(summary.Items[0].MayHaveSent);
+        Assert.False(summary.Items[1].StillToSend);
+        Assert.True(summary.Items[1].MayHaveSent);
+        Assert.True(summary.Items[2].StillToSend); // skipped: checked again when it's sent
+
+        var changed = await Run([await Line(f.File("d.pdf"))], new FakeQueue { FailOn = _ => new BatchSettingRefusedException("No.") });
+        Assert.False(changed.Items[0].MayHaveSent); // refused before anything was sent
+    }
+
     // ------------------------------------------------------------------ what the driver kept
 
     [Fact]

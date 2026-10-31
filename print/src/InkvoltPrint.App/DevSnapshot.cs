@@ -114,6 +114,20 @@ internal static class DevSnapshot
             if (copy == "idcard") await copier.ScanBackCommand.ExecuteAsync(null);
             await Task.Delay(TimeSpan.FromSeconds(2));
         }
+        // --batch: Print › Batch with sample files (demo only), the locked one opened with its password; --batch-decline leaves it out,
+        // --batch-run sends them to the made-up queue, --batch-stop n with it jams the queue after n jobs.
+        if (args.Contains("--batch") && window.DataContext is ViewModels.MainViewModel { Selected: { Pc.IsDemo: true } batchPrinter })
+        {
+            ViewModels.PrintViewModel.AskPdfPassword = (_, _) => args.Contains("--batch-decline") ? null : "demo";
+            if (int.TryParse(Value(args, "--batch-stop"), out var jamAfter)) DemoBatchQueue.ProblemAfter = jamAfter;
+            await batchPrinter.OpenBatchAsync(Demo.SampleBatch());
+            var batch = batchPrinter.Print.Batch!;
+            if (batch.Rows.Count > 1) batch.Rows[1].Copies = 2;
+            if (batch.Rows.Count > 1) batch.Rows[1].TwoSided = true;
+            if (batch.Rows.Count > 1) batch.Rows[1].Range = "1-3";
+            if (args.Contains("--batch-run")) await batch.PrintCommand.ExecuteAsync(null);
+            await Task.Delay(TimeSpan.FromSeconds(2));
+        }
         if (args.Contains("--photos") && window.DataContext is ViewModels.MainViewModel { Selected: { } photoPrinter })
             await PhotosAsync(photoPrinter, args);
         if (args.Contains("--maintenance") && window.DataContext is ViewModels.MainViewModel { Selected: { } maintained })

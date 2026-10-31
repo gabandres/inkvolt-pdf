@@ -417,6 +417,32 @@ internal static class Demo
         return Jpeg(visual, width, height);
     }
 
+    /// <summary>
+    /// Sample files for Print › Batch, written here (none ship with the app) under %TEMP%: PDFs, a picture of each kind, a TIFF of two
+    /// pages and a locked PDF, whose password is "demo".
+    /// </summary>
+    public static IReadOnlyList<string> SampleBatch()
+    {
+        var folder = Path.Combine(Path.GetTempPath(), "Inkvolt Print demo batch");
+        Directory.CreateDirectory(folder);
+        string Save(string name, byte[] bytes)
+        {
+            var path = Path.Combine(folder, name);
+            if (!File.Exists(path)) File.WriteAllBytes(path, bytes);
+            return path;
+        }
+        return
+        [
+            Save("Invoice 1 of 3.pdf", Core.Printing.BatchPrintSamples.Pdf(2, "Invoice 1")),
+            Save("Invoice 2 of 3.pdf", Core.Printing.BatchPrintSamples.Pdf(4, "Invoice 2")),
+            Save("Invoice 3 of 3.pdf", Core.Printing.BatchPrintSamples.Pdf(1, "Invoice 3")),
+            Save("Team photo.jpg", Core.Printing.BatchPrintSamples.Jpeg(1600, 1200)),
+            Save("Floor plan.png", Core.Printing.BatchPrintSamples.Png(800, 600)),
+            Save("Signed contract.tif", Core.Printing.BatchPrintSamples.Tiff(2, 400, 500)),
+            Save("Payroll, password demo.pdf", Core.Printing.BatchPrintSamples.Pdf(3, "Payroll", "demo")),
+        ];
+    }
+
     /// <summary><c>inkvoltprint print --demo</c>: the made-up printers by name (never this PC's), the real files.</summary>
     public sealed class BatchHost : Core.Printing.IBatchPrintHost
     {

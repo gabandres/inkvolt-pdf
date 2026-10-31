@@ -33,6 +33,7 @@ public static class PrintPalette
                 if (has[i]) list.Add(new($"section:{i}", $"Go to {Sections[i]}", category, "", "\uE8A7"));
             list.Add(new("printer:reconnect", "Reconnect", category, "", "\uE72C"));
             if (p.CanPrint) list.Add(new("printer:photos", "Print photos…", category, "", "\uEB9F"));
+            if (p.CanPrint) list.Add(new("printer:batch", "Batch print: many files…", category, "", "\uE8A9"));
             if (p.CanFix) list.Add(new("printer:fix", "Fix printing problems…", category, "", "\uE90F"));
             if (p.IsNetwork) list.Add(new("printer:maintenance", "Printer maintenance…", category, "", "\uE90F"));
             list.Add(new("printer:remove", "Remove from Inkvolt Print…", category, "", "\uE74D"));

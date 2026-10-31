@@ -190,6 +190,7 @@ public partial class MainWindow : Window
             case ("printer", "setup"): Run(p?.SetUpCommand); break;
             case ("printer", "reconnect"): Run(p?.ReconnectCommand); break;
             case ("printer", "photos"): Run(p?.GoToPhotosCommand); break;
+            case ("printer", "batch"): p?.GoToBatch(); break;
             case ("printer", "fix"): Run(p?.OpenFixerCommand); break;
             case ("printer", "maintenance"): Run(p?.ShowMaintenanceCommand); break;
             case ("printer", "remove"): Run(vm.ForgetCommand, p); break;
@@ -325,7 +326,7 @@ public partial class MainWindow : Window
     private void Window_DragOver(object sender, DragEventArgs e)
     {
         var files = Dropped(e);
-        e.Effects = (DroppedPdf(files) is not null || DroppedPictures(files).Count > 0) && Vm?.Selected is not null ? DragDropEffects.Copy : DragDropEffects.None;
+        e.Effects = (DroppedPdf(files) is not null || DroppedPictures(files).Count > 0 || files.Any(Directory.Exists)) && Vm?.Selected is not null ? DragDropEffects.Copy : DragDropEffects.None;
         e.Handled = true;
     }
 
@@ -336,7 +337,11 @@ public partial class MainWindow : Window
         {
             var files = Dropped(e);
             if (Vm?.Selected is not { } printer) return;
-            if (DroppedPdf(files) is { } path && File.Exists(path)) await printer.OpenPdfAsync(path);
+            // A folder, several PDFs, or anything printable while Batch shows: all of it goes to the batch, none is quietly left out.
+            if (printer.CanPrint && (files.Any(Directory.Exists) || files.Count(f => f.EndsWith(".pdf", StringComparison.OrdinalIgnoreCase)) > 1
+                                     || (printer.SelectedSection == PrinterViewModel.PrintSection && printer.Print.ShowBatch)))
+                await printer.OpenBatchAsync(files);
+            else if (DroppedPdf(files) is { } path && File.Exists(path)) await printer.OpenPdfAsync(path);
             else if (DroppedPictures(files).Where(File.Exists).ToList() is { Count: > 0 } pictures) await printer.OpenPhotosAsync(pictures);
         }
         catch (Exception ex)

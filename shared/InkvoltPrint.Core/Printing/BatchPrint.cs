@@ -502,6 +502,12 @@ public sealed record BatchPrintResult(int Index, string Path, BatchPrintState St
     int SheetsEstimated, int SheetsSent, DateTime Time)
 {
     public string Name => System.IO.Path.GetFileName(Path);
+
+    /// <summary>Sending failed part-way: some of it may be in the queue, so it's never sent again without someone choosing to.</summary>
+    public bool MayHaveSent { get; init; }
+
+    /// <summary>Print sends this file (again): it hasn't reached the queue, for sure. Pressing Print twice or resuming a stopped batch never prints a file twice.</summary>
+    public bool StillToSend => State is BatchPrintState.Waiting or BatchPrintState.Stopped or BatchPrintState.Skipped;
 }
 
 /// <param name="Index">The file's place in the list.</param>
@@ -562,10 +568,10 @@ public static class BatchPrintRunner
             stoppedAt ??= at;
             stopReason ??= why;
         }
-        void Finish(int index, BatchPrintLine line, BatchPrintState state, string message, int sheetsSent = 0)
+        void Finish(int index, BatchPrintLine line, BatchPrintState state, string message, int sheetsSent = 0, bool unsure = false)
         {
             var result = new BatchPrintResult(index, line.Path, state, message, line.Pages.Count, line.Settings.Copies, line.Settings.TwoSided, line.Settings.Paper,
-                line.Sheets, sheetsSent, DateTime.Now);
+                line.Sheets, sheetsSent, DateTime.Now) { MayHaveSent = unsure };
             results.Add(result);
             progress?.Report(new BatchPrintProgress(index, state, message, result));
         }
@@ -591,14 +597,14 @@ public static class BatchPrintRunner
             }
 
             progress?.Report(new BatchPrintProgress(i, BatchPrintState.Sending, "Getting it ready…"));
-            var (state, message, sheets, stop) = await SendOneAsync(line, queue, documents, options, progress, i, ct).ConfigureAwait(false);
+            var (state, message, sheets, stop, unsure) = await SendOneAsync(line, queue, documents, options, progress, i, ct).ConfigureAwait(false);
             if (stop is not null) Stop(i, stop);
-            Finish(i, line, state, message, sheets);
+            Finish(i, line, state, message, sheets, unsure);
         }
         return new BatchPrintSummary(results, stoppedAt, stopReason);
     }
 
-    private static async Task<(BatchPrintState State, string Message, int Sheets, string? Stop)> SendOneAsync(BatchPrintLine line, IBatchQueue queue, IBatchDocuments documents,
+    private static async Task<(BatchPrintState State, string Message, int Sheets, string? Stop, bool Unsure)> SendOneAsync(BatchPrintLine line, IBatchQueue queue, IBatchDocuments documents,
         BatchPrintOptions options, IProgress<BatchPrintProgress>? progress, int index, CancellationToken ct)
     {
         const string NotSent = "Not sent: the batch stopped before it.";
@@ -613,7 +619,7 @@ public static class BatchPrintRunner
             {
                 problem = ex is TimeoutException ? "Windows doesn't answer about the printer." : ex.Message;
             }
-            if (problem is not null) return (BatchPrintState.Stopped, NotSent, 0, problem);
+            if (problem is not null) return (BatchPrintState.Stopped, NotSent, 0, problem, false);
 
             IBatchDocument document;
             try
@@ -622,11 +628,11 @@ public static class BatchPrintRunner
             }
             catch (BatchPasswordException)
             {
-                return (BatchPrintState.Failed, "The file changed since the estimate: its password no longer opens it. Not printed.", 0, null);
+                return (BatchPrintState.Failed, "The file changed since the estimate: its password no longer opens it. Not printed.", 0, null, false);
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
-                return (BatchPrintState.Failed, $"{BatchPrintText.Describe(ex)} Not printed.", 0, null);
+                return (BatchPrintState.Failed, $"{BatchPrintText.Describe(ex)} Not printed.", 0, null, false);
             }
 
             using (document)
@@ -634,7 +640,7 @@ public static class BatchPrintRunner
                 if (document.Fingerprint != line.Measure.Fingerprint || document.PageCount != line.Measure.PageCount)
                     return (BatchPrintState.Failed, "The file changed since the estimate" +
                         (document.PageCount != line.Measure.PageCount ? $" ({BatchPrintText.Count(line.Measure.PageCount, "page")} then, {document.PageCount:N0} now)" : "") +
-                        ". Not printed: check the list again to print it.", 0, null);
+                        ". Not printed: check the list again to print it.", 0, null, false);
 
                 var job = new BatchPrintJob(line.Name, line.Pages, line.Settings.Copies, line.Settings.TwoSided, line.Settings.Paper, line.Sheets);
                 var limit = options.SendTimeout + options.SendTimePerPage * line.Pages.Count;
@@ -653,38 +659,38 @@ public static class BatchPrintRunner
                     sendCancel.Cancel(); // a drawing that hung sends nothing if it ever wakes up
                     return (BatchPrintState.Failed, spooling ? "Windows didn't finish taking it in time: check the queue before sending it again."
                         : "It took too long to draw: it may be damaged. Not printed.", 0,
-                        spooling ? "Windows stopped taking jobs." : null);
+                        spooling ? "Windows stopped taking jobs." : null, spooling);
                 }
                 if (receipt.Sheets > line.Sheets)
                     return (BatchPrintState.Failed, $"The queue took {BatchPrintText.Sheets(receipt.Sheets)}, more than the {line.Sheets:N0} estimated.", receipt.Sheets,
-                        "A job came to more sheets than its estimate, so nothing more is sent.");
-                return (BatchPrintState.Sent, $"Sent to the queue: {BatchPrintText.Sheets(receipt.Sheets)}.", receipt.Sheets, null);
+                        "A job came to more sheets than its estimate, so nothing more is sent.", true);
+                return (BatchPrintState.Sent, $"Sent to the queue: {BatchPrintText.Sheets(receipt.Sheets)}.", receipt.Sheets, null, false);
             }
         }
         catch (OperationCanceledException)
         {
-            return (BatchPrintState.Stopped, NotSent, 0, "You stopped the batch.");
+            return (BatchPrintState.Stopped, NotSent, 0, "You stopped the batch.", false);
         }
         catch (BatchSettingRefusedException ex)
         {
-            return (BatchPrintState.Failed, $"{ex.Message} Not printed.", 0, null);
+            return (BatchPrintState.Failed, $"{ex.Message} Not printed.", 0, null, false);
         }
         catch (BatchFileException ex)
         {
-            return (BatchPrintState.Failed, $"{ex.Message} Not printed.", 0, null);
+            return (BatchPrintState.Failed, $"{ex.Message} Not printed.", 0, null, false);
         }
         catch (BatchQueueException ex) when (ex.MayHaveSent)
         {
-            return (BatchPrintState.Failed, "Sending failed part-way: check the queue before sending it again.", 0, ex.Message);
+            return (BatchPrintState.Failed, "Sending failed part-way: check the queue before sending it again.", 0, ex.Message, true);
         }
         catch (BatchQueueException ex)
         {
-            return (BatchPrintState.Stopped, NotSent, 0, ex.Message);
+            return (BatchPrintState.Stopped, NotSent, 0, ex.Message, false);
         }
         catch (Exception ex)
         {
             // Spooler, driver and serializer errors come in many types. Whether any of the job got there isn't known.
-            return (BatchPrintState.Failed, "Sending failed: check the queue before sending it again.", 0, ex.Message);
+            return (BatchPrintState.Failed, "Sending failed: check the queue before sending it again.", 0, ex.Message, true);
         }
     }
 

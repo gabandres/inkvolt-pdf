@@ -750,7 +750,14 @@
 
         <!-- ===================== Print ===================== -->
         <DataTemplate DataType="{x:Type vm:PrintViewModel}">
-            <Grid Margin="0,0,16,16">
+            <DockPanel>
+            <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,0,16,12">
+                <RadioButton Content="One PDF" GroupName="printmode" IsChecked="{Binding ShowBatch, Converter={StaticResource Not}}" MinWidth="0" Margin="0,0,20,0" />
+                <RadioButton Content="Batch" GroupName="printmode" IsChecked="{Binding ShowBatch}" MinWidth="0"
+                             ToolTip="Many PDFs and pictures, or a folder: see the sheets before anything prints" />
+            </StackPanel>
+            <views:BatchPrintView DataContext="{Binding Batch}" Visibility="{Binding DataContext.ShowBatch, RelativeSource={RelativeSource AncestorType=DockPanel}, Converter={StaticResource VisibleWhen}}" />
+            <Grid Margin="0,0,16,16" Visibility="{Binding ShowBatch, Converter={StaticResource VisibleWhen}, ConverterParameter=invert}">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="300" />
                     <ColumnDefinition Width="*" />
@@ -891,6 +898,7 @@
                     </Grid>
                 </Border>
             </Grid>
+            </DockPanel>
         </DataTemplate>
 
         <!-- ===================== Copy ===================== -->

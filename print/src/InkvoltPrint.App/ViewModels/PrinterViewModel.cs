@@ -63,7 +63,7 @@ public sealed partial class PrinterViewModel : ObservableObject, IDisposable
         _pc = pc;
         _session = new PrinterSession(uuid, new PrinterRecipe(pc.DeviceTransport, pc.Snmp, new PinStore(state, uuid)),
             () => state.GetAcceptedUuids(uuid), uuids => state.AcceptUuids(uuid, uuids));
-        Print = new PrintViewModel(FindQueueAsync, state);
+        Print = new PrintViewModel(FindQueueAsync, state) { Batch = new BatchPrintViewModel(pc.BatchQueue(uuid, FindQueueAsync), Printing.WindowsBatchDocuments.Instance, state) };
         Jobs = new PrintJobsViewModel(pc.PrintJobs(FindQueueAsync));
         Copy = new CopyViewModel(FindQueueAsync, state, pc.MadeUpPrint) { HasQueue = QueueInstalled };
         Photos = new PhotosViewModel(FindQueueAsync, state, pc.PhotoQueue(uuid));
@@ -1256,11 +1256,26 @@ public sealed partial class PrinterViewModel : ObservableObject, IDisposable
     [RelayCommand]
     private void GoToPrint() => SelectedSection = PrintSection;
 
+    /// <summary>Print › Batch (the command palette).</summary>
+    public void GoToBatch()
+    {
+        SelectedSection = PrintSection;
+        Print.ShowBatch = true;
+    }
+
     /// <summary>Drag-and-drop / "Open with": jump to Print and load the file.</summary>
     public Task OpenPdfAsync(string path)
     {
         SelectedSection = PrintSection;
         return Print.OpenAsync(path);
+    }
+
+    /// <summary>Print › Batch, with what was dropped on it (a folder, several PDFs).</summary>
+    public Task OpenBatchAsync(IReadOnlyList<string> paths)
+    {
+        SelectedSection = PrintSection;
+        Print.ShowBatch = true;
+        return Print.Batch!.AddAsync(paths);
     }
 
     /// <summary>Drag-and-drop / "Open with" for pictures: jump to Photos and add them.</summary>
