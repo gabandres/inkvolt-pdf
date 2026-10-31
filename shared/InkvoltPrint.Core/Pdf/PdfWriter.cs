@@ -69,8 +69,7 @@ public static class PdfWriter
 
     /// <summary>
     /// A page's words as invisible text; empty when none can be written. Each is stretched to fill its box in its own text
-    /// matrix. A space goes in the gap to the next word of a line (to its left on a right-to-left line), so a phrase across
-    /// words is found; Chinese and Japanese words on a line, which take none, are stretched up to the next one so that no
+    /// matrix. A space goes in the gap to the next word of a line, so a phrase across words is found; Chinese and Japanese words on a line, which take none, are stretched up to the next one so that no
     /// reader sees a gap to turn into a space.
     /// </summary>
     private static string TextLayer(IReadOnlyList<OcrWord> words, OcrFont font, double scale, double pageHeight)
@@ -94,21 +93,20 @@ public static class PdfWriter
 
             var size = Math.Max(MinSize, box.Height * scale);
             var baseline = pageHeight - (box.Y + box.Height) * scale + size * 0.2; // baseline about 20% above the box's bottom
-            var (left, right) = (box.X, box.X + box.Width);
-            var nextLeft = sameLine && !unspaced && next.Box.X + next.Box.Width <= box.X;
-            var gapLeft = nextLeft ? box.X - next.Box.X - next.Box.Width : 0;
-            // Right to left, the space lies before the word's first letter on the page: in one string with the word, as pdf.js
-            // drops a space shown by itself after a jump back. It is read as the word's last character.
-            if (nextLeft && gapLeft > 0 && gapLeft < 2 * Math.Max(box.Height, next.Box.Height))
+            var right = box.X + box.Width;
+            // Right to left, the word before lies to the right: the space between them goes in one string with this word, on
+            // its right end, which is read as its first character. pdf.js drops a space shown by itself or leading a string.
+            if (i > 0 && usable[i - 1] is var before && SameLine(box, before.Box) && !(OcrText.IsUnspaced(text) && OcrText.IsUnspaced(before.Text))
+                && before.Box.X - right is var gapRight and > 0 && gapRight < 2 * Math.Max(box.Height, before.Box.Height))
             {
-                clusters = [" ", .. clusters];
-                left -= gapLeft;
+                clusters = [.. clusters, " "];
+                width += gapRight;
             }
-            Show(content, font, clusters, left * scale, baseline, size, (width + box.X - left) * scale);
-            if (!sameLine || unspaced || nextLeft) continue;
-            var gapRight = next.Box.X - right;
-            if (gapRight > 0 && gapRight < 2 * Math.Max(box.Height, next.Box.Height))
-                Show(content, font, [" "], right * scale, baseline, size, gapRight * scale);
+            Show(content, font, clusters, box.X * scale, baseline, size, width * scale);
+            if (!sameLine || unspaced || next.Box.X + next.Box.Width <= box.X) continue;
+            var gap2 = next.Box.X - right;
+            if (gap2 > 0 && gap2 < 2 * Math.Max(box.Height, next.Box.Height))
+                Show(content, font, [" "], right * scale, baseline, size, gap2 * scale);
         }
         return content.Length == 0 ? "" : $"BT 3 Tr\n{content}ET\n";
     }

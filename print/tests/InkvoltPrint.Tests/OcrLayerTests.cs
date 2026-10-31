@@ -406,7 +406,7 @@ public class OcrLayerTests
     {
         // The words of a right-to-left line come in reading order: the first is the one furthest right.
         var pdf = Pdf(At("שלום", x: 600, w: 200), At("עולם", x: 340, w: 200));
-        Assert.Equal([" םולש", "םלוע"], Shown(pdf));
+        Assert.Equal(["םולש", "םלוע "], Shown(pdf));
     }
 
     [Fact]
