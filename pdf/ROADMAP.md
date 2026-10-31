@@ -538,6 +538,20 @@ Pro… window: done 2026-10-30 (`mac/InkvoltPdfKit/Sources/PdfCore/Pro.swift`, `
   change, OCR text included; results with context, opened at the hit; accents and case ignored as Find does. Test:
   10,000 PDFs indexed once, a word query answered in under 1 s, a changed file found again within a minute.
 - **Effort** M. Windows; Mac after 1.0 (Spotlight covers part of it there).
+- **Now.** Windows done 2026-10-31: Edit › Search Folders… (Ctrl+Alt+Shift+F, the command palette), Pro (`ProFeature.FolderSearch`; the gate stays off). No new
+  dependency: a small inverted index of our own, one file per folder in the data folder's `FolderIndex` (`FolderIndex`): terms to pages, each page's text compressed, written
+  only at the end, a commit at a time, flushed before its footer, so a crash leaves the last commit; compaction writes a new file. Terms fold what Find's own comparer reads alike,
+  asked of the comparer (`IndexTerms`), and a word is found inside longer ones; the index only proposes pages, Find runs on the kept text and has the last word, so no search opens a PDF.
+  Only **index workers** parse PDFs (`IndexWorkers`, the find workers' pattern, below normal priority, 2 GB each); `FolderIndexer` keeps it current by the system's change notices and a look every 30 s.
+  OCR text layers are indexed; no OCR runs, and a scan with no text is counted and said. Damaged, password-protected, over 512 MB or 50,000 pages, over 2 minutes of processor time, or crashing a worker twice:
+  skipped, counted, listed, read again when it changes or with Rebuild.
+  **Checked** (`tools/bench`, `index-make`, `index-run`; Surface Laptop 7, Snapdragon X, on battery, other work running; Release): 10,000 PDFs and 6 bad ones (72,797 pages, 149 MB, 200,400 terms) indexed from nothing in 158 s
+  (146-158 s; 569 s in a run while other programs took the processors, as a low-priority job should), a 154 MB index file, the app at most 179 MB. Word queries to the last result listed: 3-114 ms, the worst
+  a one-letter query at 219 ms; the first query after opening 84 ms (target 1 s, met). A changed file found again in 3.4 s, three times out of three (target a minute, met); opening the index 27 ms. The Release app on that corpus: indexed with the window answering in at most
+  35 ms, paused and resumed, a result opened at its hit, a new file found. Tests: every byte offset of a commit cut (`FolderIndexTests`), a writer killed 8 times mid-commit (`FolderIndexerTests`), workers dying, hanging, spinning and running out of memory
+  on a file, a folder going away. **Missed, not part of the target:** a phrase of two words common but rarely side by side took 3.2-4.1 s to list 500 pages (first result 14-20 ms; every page has to be read).
+  **Not checked:** real-world PDFs at this scale (the corpus is generated), a real hostile PDF (a worker's death is simulated), an MSIX install (`smoke-msix.ps1` has a step, not run), a network drive, a OneDrive placeholder (only its attributes are tested), a disk filling up.
+  **Known:** a moved file is read again; the text of a changed file stays in the index file, shown by no search, until the next compaction (within about 2 minutes). The Mac's half waits (see Mac on hold).
 
 ### 3.6 Speed on huge files (differentiator)
 - **The gap.** Acrobat users report freezes on 200-500 page files and on large drawings, and Adobe staff suggest
