@@ -94,8 +94,6 @@ internal static class Demo
         public override bool ChecksHpSoftware => false;
         public override Core.History.SupplyHistoryStore History { get; } = new(null, Core.History.DemoSupplyHistory.Seed);
 
-        public override Core.Fleet.IFleetPc FleetPc() => empty ? new EmptyFleetPc() : new Core.Fleet.DemoFleetPc(CreateTransport, Demo.Snmp, Demo.Wia, OfflinePc.Current);
-
         public override void PrepareScan(bool feederBatch, bool photosOnGlass)
         {
             FeederBatch = feederBatch;
@@ -103,7 +101,11 @@ internal static class Demo
         }
     }
 
-    /// <summary><c>--demo --no-printers status --all</c>: a made-up PC with nothing on it.</summary>
+    /// <summary>What <c>--demo status --all</c> reads: the made-up PC, or with <paramref name="empty"/> (<c>--no-printers</c>) one with nothing on it.</summary>
+    public static Core.Fleet.IFleetPc FleetPc(bool empty) =>
+        empty ? new EmptyFleetPc() : new Core.Fleet.DemoFleetPc(CreateTransport, Snmp, Wia, OfflinePc.Current);
+
+    /// <summary>A made-up PC with nothing on it.</summary>
     private sealed class EmptyFleetPc : Core.Fleet.IFleetPc
     {
         public Core.Suite.InkvoltPrinters Remembered => Core.Suite.InkvoltPrinters.Empty;

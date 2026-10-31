@@ -136,9 +136,6 @@ public abstract class PcEnvironment
     /// </summary>
     public abstract Core.History.SupplyHistoryStore History { get; }
 
-    /// <summary>What <c>status --all</c> reads: nothing it does writes to this PC's state.</summary>
-    public abstract Core.Fleet.IFleetPc FleetPc();
-
     /// <summary>
     /// What the made-up scanners hold for the next scan: a batch with separator sheets in the feeder when the scan splits into
     /// files, a few photos on the glass when it looks for them. Nothing on a real PC.
@@ -189,7 +186,6 @@ public abstract class PcEnvironment
         public override string? ImageCache => Path.Combine(AppState.DataDirectory, "images");
         public override bool ChecksHpSoftware => Features.HpCleanup;
         public override Core.History.SupplyHistoryStore History { get; } = new(Path.Combine(AppState.DataDirectory, "history"), log: Log.Write);
-        public override Core.Fleet.IFleetPc FleetPc() => new Windows.Fleet.WindowsFleetPc(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData));
     }
 
     /// <summary>Setting a discovered queue up again is pairing, which the printer does; everything else is the PC's.</summary>

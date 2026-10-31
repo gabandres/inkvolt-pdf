@@ -105,9 +105,7 @@ public sealed partial class FleetViewModel : ObservableObject
     /// <summary>A row's Open: that printer's page.</summary>
     internal void Open(string id)
     {
-        if (Find(id) is not { } printer) return;
-        _main.Selected = printer;
-        _main.IsFleetShown = false;
+        if (Find(id) is { } printer) _main.ShowPrinter(printer);
     }
 
     /// <summary>A row's Fix it…: that printer's fixer on its page.</summary>
@@ -248,8 +246,12 @@ public sealed partial class FleetRowViewModel(string id, FleetRow row, FleetView
 
     public IReadOnlyList<FleetSupplyView> Supplies => Row.Supplies.Select(s => new FleetSupplyView(s)).ToList();
 
-    /// <summary>Fix it… shows on a row with trouble, for a printer the fixer works on.</summary>
-    public bool CanFix => Row.Printer.Trouble is FleetTrouble.Error or FleetTrouble.Warning or FleetTrouble.Offline && owner.CanFix(Id);
+    /// <summary>
+    /// Fix it… shows where the fixer can help: a printer that can't be reached or is in error, and a queue printer with any trouble
+    /// (a paused queue reads as a warning). Low ink on a network printer isn't something it fixes.
+    /// </summary>
+    public bool CanFix => (Row.Printer.Trouble is FleetTrouble.Error or FleetTrouble.Offline
+                           || (Row.Printer.Trouble == FleetTrouble.Warning && Row.Printer.Kind == FleetKind.Queue)) && owner.CanFix(Id);
 
     public string OpenName => $"Open {Row.Printer.Name}";
     public string FixName => $"Fix {Row.Printer.Name}";

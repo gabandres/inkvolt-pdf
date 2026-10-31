@@ -31,7 +31,8 @@ internal static class StatusCommand
         int code;
         try
         {
-            var pc = demo ? (args.Contains("--no-printers") ? Demo.EmptyPc : Demo.Pc).FleetPc() : PcEnvironment.Real.FleetPc();
+            // Not PcEnvironment.Real or AppState: opening those may move the data folder, and this writes nothing.
+            IFleetPc pc = demo ? Demo.FleetPc(args.Contains("--no-printers")) : new Windows.Fleet.WindowsFleetPc(local);
             Core.Pro.Store = pc is Windows.Fleet.WindowsFleetPc real ? real.ProStore(local) : new MemoryProStore();
             if (demo && args.Contains("--pro-enforce")) Core.Pro.Enforced = true; // the locked path (demo only: memory)
             code = await FleetCommand.RunAsync(command, Console.Out, Console.Error, pc, () => DateTimeOffset.Now, Diagnostics.Identity.Current, stop.Token);

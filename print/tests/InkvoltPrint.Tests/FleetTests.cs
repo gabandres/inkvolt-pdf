@@ -356,6 +356,44 @@ public class FleetTests
         Assert.Equal("No printers yet.", FleetPage.Summary([]));
     }
 
+    [Fact]
+    public void The_command_palette_offers_the_page() =>
+        Assert.Contains(PrintPalette.Build(null, -1, [], []), e => e.Id == "app:fleet");
+
+    // ------------------------------------------------------------------ what status --all reads from the state file
+
+    [Fact]
+    public void The_state_file_gives_what_a_read_without_the_app_needs()
+    {
+        var read = InkvoltPrinters.Parse("""
+            {
+              "Printers": [{ "Uuid": "p", "Name": "Laser", "Host": "192.0.2.10", "IppUri": "ipp://192.0.2.10/ipp/print",
+                             "Snmp": { "SerialNumber": "S1", "Model": "M", "SystemName": "N" } }],
+              "AcceptedUuids": { "p": ["other"] },
+              "Firmware": { "p": { "Version": "2024-08-13", "Since": "2025-01-01" } },
+              "ForgottenUuids": ["windows-queue:old"],
+              "ProKey": "KEY"
+            }
+            """);
+
+        var p = Assert.Single(read.Printers);
+        Assert.Equal("ipp://192.0.2.10/ipp/print", p.IppUri!.OriginalString);
+        Assert.Equal(new SnmpDevice("S1", "M", "N"), p.Snmp);
+        Assert.Equal(["other"], p.AcceptedUuids);
+        Assert.Equal("2024-08-13", p.Firmware);
+        Assert.Equal(["windows-queue:old"], read.Forgotten);
+        Assert.Equal("KEY", read.ProKey);
+    }
+
+    [Fact]
+    public void A_state_file_from_before_these_fields_still_reads()
+    {
+        var p = Assert.Single(InkvoltPrinters.Parse("""{ "Printers": [{ "Uuid": "p", "Name": "Laser", "Host": "192.0.2.10", "Snmp": null }], "Firmware": 7, "AcceptedUuids": [] }""").Printers);
+        Assert.Null(p.Snmp);
+        Assert.Null(p.Firmware);
+        Assert.Empty(p.AcceptedUuids);
+    }
+
     // ------------------------------------------------------------------ last known, from the supply history
 
     [Fact]

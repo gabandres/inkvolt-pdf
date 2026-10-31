@@ -290,7 +290,7 @@ public partial class MainWindow : Window
             {
                 e.Cancel = true;
                 if (Vm.Selected is { Scan: not null } sel && sel.Scan.HasUnsavedPages) sel.SelectedSection = PrinterViewModel.ScanSection;
-                else Vm.Selected = printers[0];
+                else Vm.ShowPrinter(printers[0]);
             }
         }
         base.OnClosing(e);
