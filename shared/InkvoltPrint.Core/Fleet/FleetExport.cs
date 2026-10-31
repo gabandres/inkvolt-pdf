@@ -107,7 +107,8 @@ public static class FleetExport
     private static string? LastReading(FleetPrinter p) =>
         p.LastReading is { } time ? Time(time) : p.LastReadingDay?.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
 
-    private static FleetPrinter Scrubbed(FleetPrinter p, Diagnostics.Identity who) => p with
+    /// <summary>The entry as it may leave the PC.</summary>
+    internal static FleetPrinter Scrubbed(FleetPrinter p, Diagnostics.Identity who) => p with
     {
         Name = Text(p.Name, who) ?? "Printer with no name",
         Model = Text(p.Model, who),

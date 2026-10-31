@@ -364,6 +364,28 @@ public static class OfflineDiagnosis
         return result;
     }
 
+    /// <summary>
+    /// The queues known to print to this printer, asking nothing of the network: <see cref="MatchAsync"/> without its match by
+    /// name, which only a look at the address could settle. For repairs made without looking at each printer in turn (Fix all).
+    /// </summary>
+    public static IReadOnlyList<MatchedQueue> OwnQueues(OfflineDevice device, IReadOnlyList<QueueFacts> queues)
+    {
+        var uuid = NormalizeUuid(device.Uuid);
+        var hosts = new HashSet<string>(device.PreviousHosts, StringComparer.OrdinalIgnoreCase);
+        if (device.Host is { Length: > 0 } now) hosts.Add(now);
+        var result = new List<MatchedQueue>();
+        foreach (var q in queues)
+        {
+            MatchReason? reason =
+                uuid is not null && NormalizeUuid(q.ContainerId) == uuid ? MatchReason.Container
+                : device.StoredQueueName is { } stored && string.Equals(stored, q.Name, StringComparison.OrdinalIgnoreCase) ? MatchReason.Stored
+                : PortHost(q.Port) is { } host && hosts.Contains(host) ? MatchReason.Address
+                : null;
+            if (reason is { } r) result.Add(new MatchedQueue(q, r, PortIsStale: false));
+        }
+        return result;
+    }
+
     /// <summary>The port's fixed address points somewhere other than where the printer is now.</summary>
     internal static bool IsStale(QueuePort port, string? address, string? hostName)
     {
