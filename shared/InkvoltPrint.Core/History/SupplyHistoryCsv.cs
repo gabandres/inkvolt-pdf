@@ -39,5 +39,5 @@ public static class SupplyHistoryCsv
 
     private static string Number(int? n) => n?.ToString(CultureInfo.InvariantCulture) ?? "";
 
-    private static string Cell(string text) => Suite.CsvText.Cell(text);
+    private static string Cell(string text) => Suite.CsvCell.Of(text);
 }

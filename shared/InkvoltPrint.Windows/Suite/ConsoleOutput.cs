@@ -13,9 +13,19 @@ namespace InkvoltPrint.Windows.Suite;
 public static class ConsoleOutput
 {
     /// <summary>Output to the redirected handles when there are some, else to the starting terminal's console.</summary>
-    public static void Use()
+    /// <param name="utf8Pipes">Redirected output is UTF-8, whatever the console's code page, so names in any script reach a script whole.</param>
+    public static void Use(bool utf8Pipes = false)
     {
-        if (Valid(GetStdHandle(StdOutput))) return; // redirected: a pipe or a file (a script, | Out-Default, a task's log)
+        if (Valid(GetStdHandle(StdOutput))) // redirected: a pipe or a file (a script, | Out-Default, a task's log)
+        {
+            if (utf8Pipes)
+            {
+                var utf8 = new UTF8Encoding(false);
+                Console.SetOut(new StreamWriter(Console.OpenStandardOutput(), utf8) { AutoFlush = true });
+                Console.SetError(new StreamWriter(Console.OpenStandardError(), utf8) { AutoFlush = true });
+            }
+            return;
+        }
         if (!AttachConsole(AttachParentProcess)) return; // started from Explorer or a task: nowhere to write, the exit code tells
         var console = CreateFile("CONOUT$", GenericRead | GenericWrite, FileShareRead | FileShareWrite, IntPtr.Zero, OpenExisting, 0, IntPtr.Zero);
         if (!Valid(console)) return;

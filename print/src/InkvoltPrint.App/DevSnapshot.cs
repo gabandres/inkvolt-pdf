@@ -115,7 +115,9 @@ internal static class DevSnapshot
             await Task.Delay(TimeSpan.FromSeconds(2));
         }
         // --batch: Print › Batch with sample files (demo only), the locked one opened with its password; --batch-decline leaves it out,
-        // --batch-run sends them to the made-up queue, --batch-stop n with it jams the queue after n jobs.
+        // --batch-run sends them to the made-up queue, --batch-stop n with it jams the queue after n jobs, --batch-resume then clears the jam and
+        // presses Print again, --batch-cancel presses Stop just after Print; --batch-list file saves the list and opens it again first;
+        // --batch-report file writes each row's state and the message.
         if (args.Contains("--batch") && window.DataContext is ViewModels.MainViewModel { Selected: { Pc.IsDemo: true } batchPrinter })
         {
             ViewModels.PrintViewModel.AskPdfPassword = (_, _) => args.Contains("--batch-decline") ? null : "demo";
@@ -125,7 +127,29 @@ internal static class DevSnapshot
             if (batch.Rows.Count > 1) batch.Rows[1].Copies = 2;
             if (batch.Rows.Count > 1) batch.Rows[1].TwoSided = true;
             if (batch.Rows.Count > 1) batch.Rows[1].Range = "1-3";
-            if (args.Contains("--batch-run")) await batch.PrintCommand.ExecuteAsync(null);
+            if (Value(args, "--batch-list") is { } listFile)
+            {
+                Core.Printing.BatchPrintList.Save(listFile, batch.Rows.Select(r => new Core.Printing.BatchListEntry(r.Path, r.Settings)));
+                var ask = ViewModels.Prompt.Confirm;
+                ViewModels.Prompt.Confirm = (_, _) => true; // "replace the list?"
+                try { await batch.OpenListAsync(listFile); }
+                finally { ViewModels.Prompt.Confirm = ask; }
+            }
+            if (args.Contains("--batch-cancel"))
+            {
+                var printing = batch.PrintCommand.ExecuteAsync(null);
+                batch.StopCommand.Execute(null);
+                await printing;
+            }
+            else if (args.Contains("--batch-run")) await batch.PrintCommand.ExecuteAsync(null);
+            if (args.Contains("--batch-resume"))
+            {
+                DemoBatchQueue.ProblemAfter = null;
+                await batch.PrintCommand.ExecuteAsync(null);
+            }
+            if (Value(args, "--batch-report") is { } batchReport)
+                await File.WriteAllLinesAsync(batchReport, [.. batch.Rows.Select(r => $"{r.Name} | {r.StateText} | {r.SheetsText} | {r.Message}"),
+                    $"message: {batch.Message}", $"estimate: {batch.EstimateText}", $"can print: {batch.PrintCommand.CanExecute(null)}"]);
             await Task.Delay(TimeSpan.FromSeconds(2));
         }
         if (args.Contains("--photos") && window.DataContext is ViewModels.MainViewModel { Selected: { } photoPrinter })
@@ -170,6 +194,23 @@ internal static class DevSnapshot
                 }
             }
             await Task.Delay(TimeSpan.FromSeconds(2));
+        }
+        // --fleet [fix]: the Fleet page; fix runs Fix all, answering yes (demo only); --fleet-export file writes its CSV or JSON.
+        if (args.Contains("--fleet") && window.DataContext is ViewModels.MainViewModel fleetMain)
+        {
+            window.ShowFleet();
+            await Task.Delay(TimeSpan.FromSeconds(1));
+            if (Value(args, "--fleet") == "fix" && fleetMain.Presets.IsDemo)
+            {
+                var ask = ViewModels.Prompt.Confirm;
+                ViewModels.Prompt.Confirm = (_, _) => true;
+                try { await fleetMain.Fleet.FixAllCommand.ExecuteAsync(null); }
+                finally { ViewModels.Prompt.Confirm = ask; }
+                await Task.Delay(TimeSpan.FromSeconds(6)); // the made-up queues' next read
+            }
+            if (Value(args, "--fleet-export") is { } fleetFile) await fleetMain.Fleet.WriteAsync(fleetFile);
+            fleetMain.Fleet.Refresh();
+            await Task.Delay(TimeSpan.FromSeconds(1));
         }
         if (scrollToEnd && FindTabs(window) is { } shown)
         {

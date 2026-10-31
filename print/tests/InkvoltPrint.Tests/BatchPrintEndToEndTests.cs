@@ -29,6 +29,8 @@ public class BatchPrintEndToEndTests
             RedirectStandardError = true,
             UseShellExecute = false,
             CreateNoWindow = true,
+            StandardOutputEncoding = System.Text.Encoding.UTF8,
+            StandardErrorEncoding = System.Text.Encoding.UTF8,
         };
         foreach (var a in args) start.ArgumentList.Add(a);
         start.Environment.Remove(BatchPrintCommandLine.PasswordVariable);
@@ -197,6 +199,21 @@ public class BatchPrintEndToEndTests
         Assert.Equal(BatchPrintSummary.Wrong, nobody.Code);
         Assert.Contains("no demo printer", nobody.Err);
         Assert.Equal(BatchPrintSummary.Done, (await Run(null, "print", "--help")).Code);
+    }
+
+    [Fact]
+    public async Task A_name_in_any_script_reaches_a_script_whole_and_a_formula_stays_words_in_the_report()
+    {
+        if (!OperatingSystem.IsWindows()) return;
+        using var f = new BatchFolder();
+        const string name = "=Résumé 東京 1+1.pdf";
+        var path = Path.Combine(f.Root, name);
+        File.WriteAllBytes(path, BatchPrintSamples.Pdf(1, "Name"));
+        var report = Path.Combine(f.Root, "results.csv");
+        var (code, output, error) = await Run(null, "print", path, "--printer", Printer, "--report", report, "--demo");
+        Assert.True(code == BatchPrintSummary.Done, $"exit {code}\n{output}\n{error}");
+        Assert.Contains(name, output);
+        Assert.Contains($",'{name},", File.ReadAllText(report));
     }
 
     [Fact]

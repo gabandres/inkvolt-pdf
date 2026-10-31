@@ -651,16 +651,16 @@ public class BatchPrintTests
     [InlineData("\r=1")]
     public void A_cell_is_never_a_formula_whatever_the_message(string message)
     {
-        var cell = CsvText.Cell(message);
+        var cell = CsvCell.Of(message);
         Assert.StartsWith("'", cell.TrimStart('"'));
     }
 
     [Fact]
     public void Plain_text_and_quotes_are_left_as_rfc_4180_has_them()
     {
-        Assert.Equal("report.pdf", CsvText.Cell("report.pdf"));
-        Assert.Equal("\"say \"\"hi\"\", ok\"", CsvText.Cell("say \"hi\", ok"));
-        Assert.Equal("", CsvText.Cell(""));
+        Assert.Equal("report.pdf", CsvCell.Of("report.pdf"));
+        Assert.Equal("\"say \"\"hi\"\", ok\"", CsvCell.Of("say \"hi\", ok"));
+        Assert.Equal("", CsvCell.Of(""));
     }
 }
 

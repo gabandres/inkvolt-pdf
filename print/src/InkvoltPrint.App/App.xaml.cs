@@ -46,7 +46,15 @@ public partial class App : Application
         // inkvoltprint print …: no window, no single-instance handoff, exits with its code. Touches no settings.
         if (Core.Printing.BatchPrintCommandLine.IsCommand(e.Args))
         {
+            ShutdownMode = ShutdownMode.OnExplicitShutdown;
             _ = RunCommandLineAsync(e.Args);
+            return;
+        }
+        // status --all (Inkvolt Pro): a list on standard output, no window, no single-instance hand-off, no state written.
+        if (Core.Fleet.FleetCommand.IsFor(e.Args))
+        {
+            ShutdownMode = ShutdownMode.OnExplicitShutdown;
+            _ = RunStatusAsync(e.Args);
             return;
         }
         // The Store package started by its startup task behaves as --background; one started by a toast clicked after it
@@ -211,7 +219,7 @@ public partial class App : Application
 
     private async Task RunCommandLineAsync(string[] args)
     {
-        InkvoltPrint.Windows.Suite.ConsoleOutput.Use();
+        InkvoltPrint.Windows.Suite.ConsoleOutput.Use(utf8Pipes: true);
         using var cts = new CancellationTokenSource();
         Console.CancelKeyPress += (_, e) =>
         {
@@ -219,8 +227,8 @@ public partial class App : Application
             cts.Cancel();
         };
         var demo = args.Contains("--demo", StringComparer.OrdinalIgnoreCase);
-        Core.Pro.Store = demo ? new Core.Suite.MemoryProStore()
-            : new Core.Suite.SharedProStore(new Core.Suite.MemoryProStore(), Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData));
+        var local = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+        Core.Pro.Store = demo ? new Core.Suite.MemoryProStore() : new InkvoltPrint.Windows.Fleet.WindowsFleetPc(local).ProStore(local); // read only: this writes no state
         Log.Write("Command line: print");
         int code;
         try
@@ -238,6 +246,13 @@ public partial class App : Application
         Console.Error.Flush();
         Log.Write($"Command line done: exit code {code}");
         Shutdown(code);
+    }
+
+    /// <summary>A hung printer's read may still be running when the list is done: the process ends here regardless.</summary>
+    private static async Task RunStatusAsync(string[] args)
+    {
+        var code = await Task.Run(() => StatusCommand.RunAsync(args));
+        Environment.Exit(code);
     }
 
     private static string? PresetArg(string[] args) =>
