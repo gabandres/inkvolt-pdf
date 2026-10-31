@@ -45,6 +45,25 @@ public sealed class PdfSource
         }
     }
 
+    /// <summary>A PDF read through an open file (batch print holds the file so it can't change while it prints). The stream stays the caller's, open as long as this is used.</summary>
+    /// <exception cref="PdfOpenException">Not a PDF, damaged, or password protected.</exception>
+    public static async Task<PdfSource> OpenAsync(Stream file, string path, string? password)
+    {
+        try
+        {
+            var stream = file.AsRandomAccessStream();
+            return new PdfSource(password is null ? await PdfDocument.LoadFromStreamAsync(stream) : await PdfDocument.LoadFromStreamAsync(stream, password), path);
+        }
+        catch (Exception ex) when (ex.HResult == unchecked((int)0x8007052B)) // ERROR_WRONG_PASSWORD
+        {
+            throw new PdfOpenException("This PDF is password protected.", isPasswordProtected: true);
+        }
+        catch (Exception ex) when (ex is not PdfOpenException and not OperationCanceledException)
+        {
+            throw new PdfOpenException($"Could not open the PDF: {ex.Message}", isPasswordProtected: false);
+        }
+    }
+
     /// <summary>A PDF held in memory (a scanner's, <see cref="ScannedPdfPages"/>).</summary>
     /// <exception cref="PdfOpenException">Not a PDF, damaged, or password protected.</exception>
     public static async Task<PdfSource> OpenAsync(byte[] pdf)

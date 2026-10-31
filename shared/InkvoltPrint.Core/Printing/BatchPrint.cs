@@ -120,7 +120,7 @@ public sealed class BatchHeldFile : IDisposable
 }
 
 /// <summary>One page drawn for printing: a JPEG and its size in inches.</summary>
-public sealed record BatchPage(byte[] Jpeg, double WidthInches, double HeightInches);
+public sealed record BatchPrintPage(byte[] Jpeg, double WidthInches, double HeightInches);
 
 /// <summary>A file open for printing, held (<see cref="BatchHeldFile"/>) until disposed.</summary>
 public interface IBatchDocument : IDisposable
@@ -132,7 +132,7 @@ public interface IBatchDocument : IDisposable
     PageSizing Sizing { get; }
 
     /// <summary>Draws a 1-based page, off the UI thread.</summary>
-    Task<BatchPage> RenderAsync(int page, CancellationToken ct);
+    Task<BatchPrintPage> RenderAsync(int page, CancellationToken ct);
 }
 
 /// <summary>Opens the files of a batch: Windows' PDF engine and WIC in the app, a fake in the tests.</summary>

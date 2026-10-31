@@ -58,12 +58,12 @@ internal sealed class FakeDocuments : IBatchDocuments
         public int PageCount => pages;
         public PageSizing Sizing => PageSizing.ActualSize;
 
-        public async Task<BatchPage> RenderAsync(int page, CancellationToken ct)
+        public async Task<BatchPrintPage> RenderAsync(int page, CancellationToken ct)
         {
             ct.ThrowIfCancellationRequested();
             if (hangDraw) await Task.Delay(Timeout.Infinite, ct);
             if (page == drawFail) throw new BatchFileException($"Page {page} can't be drawn.");
-            return new BatchPage([0xFF, 0xD8, 0xFF, 0xD9], 8.5, 11);
+            return new BatchPrintPage([0xFF, 0xD8, 0xFF, 0xD9], 8.5, 11);
         }
 
         public void Dispose() => held.Dispose();

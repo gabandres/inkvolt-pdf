@@ -82,6 +82,7 @@ internal static class Demo
         protected override Core.Queues.IQueueStatusSource SpoolerStatus(Core.Queues.SpoolerQueue q) => Demo.QueueStatus(q);
         public override IPrintJobs PrintJobs(Func<Task<string?>> findQueue) => Demo.PrintJobs;
         public override Action<string, int>? MadeUpPrint => Demo.PrintJobs.Add;
+        public override Core.Printing.IBatchQueue BatchQueue(string uuid, Func<Task<string?>> findQueue) => new DemoBatchQueue(Demo.PhotoQueue(uuid).Options);
         public override ViewModels.DemoPhotoQueue? PhotoQueue(string uuid) => Demo.PhotoQueue(uuid);
 
         // The made-up PC's fixer never reads or touches this PC's queues; its "elevation" is made up too.
@@ -416,6 +417,20 @@ internal static class Demo
         return Jpeg(visual, width, height);
     }
 
+    /// <summary><c>inkvoltprint print --demo</c>: the made-up printers by name (never this PC's), the real files.</summary>
+    public sealed class BatchHost : Core.Printing.IBatchPrintHost
+    {
+        public Core.Printing.IBatchDocuments Documents => WindowsBatchDocuments.Instance;
+
+        public Task<Core.Printing.IBatchQueue> FindPrinterAsync(string name, CancellationToken ct)
+        {
+            var printer = CreateState().Printers.FirstOrDefault(p => string.Equals(p.Name, name, StringComparison.OrdinalIgnoreCase));
+            if (printer is null && !Queues.Any(q => string.Equals(q.Name, name, StringComparison.OrdinalIgnoreCase)))
+                throw new Core.Printing.BatchCommandException($"There is no demo printer \"{Core.Printing.BatchPrintText.Clean(name)}\".");
+            return Task.FromResult<Core.Printing.IBatchQueue>(new DemoBatchQueue(PhotoQueue(printer?.Uuid ?? name).Options));
+        }
+    }
+
     /// <summary>
     /// The demo printers' photo options: the inkjet takes photo paper in color and prints borderless on everything but Legal;
     /// the lasers take plain paper and labels, in black, with margins. Jobs "print" to <see cref="PrintJobs"/>.
@@ -551,6 +566,39 @@ internal static class Demo
 /// A pretend print queue: a few jobs, one of them someone else's (so Cancel is refused like Windows would), and the
 /// first job printing a page each time the list is read. Finished jobs leave the queue, so it empties after a while.
 /// </summary>
+/// <summary>
+/// Batch print's made-up queue: takes the demo printer's made-up papers, draws every page of the real file through the real engines, as a
+/// real job would, and "prints" to <see cref="Demo.PrintJobs"/>. <see cref="ProblemAfter"/> (a dev aid) jams it after that many jobs.
+/// </summary>
+internal sealed class DemoBatchQueue(PhotoQueueOptions options) : Core.Printing.IBatchQueue
+{
+    public static int? ProblemAfter { get; set; }
+    private static int _sent;
+
+    public Task<Core.Printing.BatchQueueInfo?> ReadAsync(CancellationToken ct) => Task.FromResult<Core.Printing.BatchQueueInfo?>(
+        new("Demo queue", options.Papers.Select(p => new Core.Printing.BatchPaper(p.Key, p.Label)).ToList(), options.DefaultPaper, CanTwoSided: true));
+
+    public Task<string?> ProblemAsync(CancellationToken ct) => Task.FromResult(_sent >= ProblemAfter ? "The demo printer has a paper jam." : null);
+
+    public async Task<Core.Printing.BatchReceipt> SendAsync(Core.Printing.IBatchDocument document, Core.Printing.BatchPrintJob job, IProgress<string>? progress, Action? onSpooling, CancellationToken ct)
+    {
+        var drawn = 0;
+        foreach (var page in job.Pages)
+        {
+            ct.ThrowIfCancellationRequested();
+            progress?.Report($"Preparing page {drawn + 1} of {job.Pages.Count}…");
+            await document.RenderAsync(page, ct).ConfigureAwait(false);
+            drawn++;
+        }
+        ct.ThrowIfCancellationRequested();
+        onSpooling?.Invoke();
+        var sheets = Core.Printing.BatchPrintSettings.Sheets(drawn, job.Copies, job.TwoSided);
+        Demo.PrintJobs.Add(job.Name, sheets);
+        Interlocked.Increment(ref _sent);
+        return new Core.Printing.BatchReceipt(drawn, sheets);
+    }
+}
+
 internal sealed class DemoPrintJobs : IPrintJobs
 {
     private readonly object _lock = new();

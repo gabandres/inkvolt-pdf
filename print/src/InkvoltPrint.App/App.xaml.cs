@@ -43,6 +43,12 @@ public partial class App : Application
             Shutdown(ShellIntegration.Unregister());
             return;
         }
+        // inkvoltprint print …: no window, no single-instance handoff, exits with its code. Touches no settings.
+        if (Core.Printing.BatchPrintCommandLine.IsCommand(e.Args))
+        {
+            _ = RunCommandLineAsync(e.Args);
+            return;
+        }
         // The Store package started by its startup task behaves as --background; one started by a toast clicked after it
         // had exited opens that printer once the window is up.
         var activation = PackagedActivation.Read();
@@ -201,6 +207,37 @@ public partial class App : Application
                 tray: args.SkipWhile(a => a != "--tray-shot").Skip(1).FirstOrDefault(), simulateAlerts: args.Contains("--simulate-alerts"),
                 args: args);
         _started = true;
+    }
+
+    private async Task RunCommandLineAsync(string[] args)
+    {
+        InkvoltPrint.Windows.Suite.ConsoleOutput.Use();
+        using var cts = new CancellationTokenSource();
+        Console.CancelKeyPress += (_, e) =>
+        {
+            e.Cancel = true; // stop the work, then exit with its code
+            cts.Cancel();
+        };
+        var demo = args.Contains("--demo", StringComparer.OrdinalIgnoreCase);
+        Core.Pro.Store = demo ? new Core.Suite.MemoryProStore()
+            : new Core.Suite.SharedProStore(new Core.Suite.MemoryProStore(), Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData));
+        Log.Write("Command line: print");
+        int code;
+        try
+        {
+            code = await Core.Printing.BatchPrintCommandLine.RunAsync(args.Where(a => !a.Equals("--demo", StringComparison.OrdinalIgnoreCase)).ToList(), Console.Out, Console.Error,
+                demo ? new Demo.BatchHost() : new Printing.BatchPrintHost(), cts.Token);
+        }
+        catch (Exception ex)
+        {
+            Log.Write($"Command line failed: {ex}");
+            Console.Error.WriteLine($"Inkvolt Print stopped: {ex.Message}");
+            code = Core.Printing.BatchPrintSummary.Wrong;
+        }
+        Console.Out.Flush();
+        Console.Error.Flush();
+        Log.Write($"Command line done: exit code {code}");
+        Shutdown(code);
     }
 
     private static string? PresetArg(string[] args) =>

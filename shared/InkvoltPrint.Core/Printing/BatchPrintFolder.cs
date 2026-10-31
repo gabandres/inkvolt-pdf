@@ -100,8 +100,9 @@ public static class BatchPrintFolder
         // A run that never finished: the file may have printed, so it's never sent again by itself.
         foreach (var left in Directory.EnumerateFiles(working).Order(NaturalOrder.Instance))
         {
-            progress?.Report(new BatchFolderProgress(Finish(folder, left, Path.GetFileName(left), BatchPrintState.Failed,
-                "Interrupted: Inkvolt Print closed while sending it, so it may have printed. Put it back in the folder to print it again.", 0)));
+            var entry = Finish(folder, left, Path.GetFileName(left), BatchPrintState.Failed,
+                "Interrupted: Inkvolt Print closed while sending it, so it may have printed. Put it back in the folder to print it again.", 0);
+            progress?.Report(new BatchFolderProgress(entry));
             failed++;
         }
 
@@ -153,8 +154,9 @@ public static class BatchPrintFolder
                         look.Forget(path);
                         if (cutOff)
                         {
-                            progress?.Report(new BatchFolderProgress(Finish(folder, moved, Path.GetFileName(path), BatchPrintState.Failed,
-                                "It reads as cut off and hasn't changed since. Not printed: if it is whole, print it from Print > Batch.", 0)));
+                            var entry = Finish(folder, moved, Path.GetFileName(path), BatchPrintState.Failed,
+                                "It reads as cut off and hasn't changed since. Not printed: if it is whole, print it from Print > Batch.", 0);
+                            progress?.Report(new BatchFolderProgress(entry));
                             failed++;
                             continue;
                         }

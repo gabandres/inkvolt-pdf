@@ -97,6 +97,9 @@ public abstract class PcEnvironment
     /// <summary>Where copies and preset scans "print" instead of a Windows queue (job name, sheets): the made-up queue; null: the Windows queue.</summary>
     public abstract Action<string, int>? MadeUpPrint { get; }
 
+    /// <summary>Where a printer's batch print jobs go: its Windows queue, or the made-up queue. Files are always real, read through <see cref="WindowsBatchDocuments"/>.</summary>
+    public abstract Core.Printing.IBatchQueue BatchQueue(string uuid, Func<Task<string?>> findQueue);
+
     /// <summary>The made-up queue's photo options and where its photo jobs "print"; null: the printer's Windows queue.</summary>
     public abstract DemoPhotoQueue? PhotoQueue(string uuid);
 
@@ -175,6 +178,7 @@ public abstract class PcEnvironment
         protected override IQueueStatusSource SpoolerStatus(SpoolerQueue q) => new SpoolerStatusSource(q);
         public override IPrintJobs PrintJobs(Func<Task<string?>> findQueue) => new WindowsPrintJobs(findQueue);
         public override Action<string, int>? MadeUpPrint => null;
+        public override Core.Printing.IBatchQueue BatchQueue(string uuid, Func<Task<string?>> findQueue) => new WindowsBatchQueue(findQueue);
         public override DemoPhotoQueue? PhotoQueue(string uuid) => null;
         public override IOfflineProbes OfflineProbes { get; } = new WindowsOfflineProbes();
         public override IOfflineRepairs OfflineRepairs(Func<Task<string?>> setUpAgain) => new SettingUpAgain(new WindowsOfflineRepairs(), setUpAgain);

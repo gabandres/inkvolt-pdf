@@ -143,6 +143,11 @@ switch (cmd)
                 ? patch : InkvoltPrint.Core.Imaging.PatchCode.PatchT, args.Contains("--a4") ? 210 / 25.4 : 8.5, args.Contains("--a4") ? 297 / 25.4 : 11);
         Console.WriteLine($"Wrote {host}");
         break;
+    case "print":
+        // Printing draws with WPF, which this developer CLI doesn't load: the app's own command line does it (the Store's inkvoltprint alias is the app).
+        Console.Error.WriteLine("Batch printing runs from the app: InkvoltPrint.exe print --help.");
+        Environment.ExitCode = InkvoltPrint.Core.Printing.BatchPrintSummary.Wrong;
+        break;
     default:
         Console.WriteLine("""
             inkvoltprint discover
@@ -163,6 +168,7 @@ switch (cmd)
             inkvoltprint ocr <in.jpg> <out.pdf> [--dpi 300]   (offline: OCR + searchable PDF from a JPEG)
             inkvoltprint scanpdf <in.pdf> [--dpi 300]      (offline: a scanner's PDF as the Scan tab takes its pages)
             inkvoltprint separator-sheet <out.pdf> [--patch T|2|3] [--a4]   (offline: printable batch scanning separator sheet)
+            InkvoltPrint.exe print --help                  (the app's own command line: print a saved list or a folder)
             """);
         break;
 }
