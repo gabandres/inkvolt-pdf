@@ -536,7 +536,7 @@ Pro… window: done 2026-10-30 (`mac/InkvoltPdfKit/Sources/PdfCore/Pro.swift`, `
   timestamps, one for its time and one over the data, which is what EU DSS asks. Signatures followed only by such data still read as valid.
   Pro: adding the data (`ProFeature.LongTermValidation`); free: verifying, the level shown, and Check Signatures Online, which asks without
   changing the file. Going online happens only through `LtvClient`, after a window listing every address and what it gets: https for the
-  timestamp server the person enters (the DigiCert default is gone), the certificates' own OCSP, CRL and issuer URLs as they name them,
+  timestamp server in the field, Sectigo's free one unless the person enters another (the http DigiCert default is gone; the real Sectigo answered and its timestamp verified, `INKVOLTPDF_REAL_TSA`), the certificates' own OCSP, CRL and issuer URLs as they name them,
   nothing private, loopback or link-local by name, by DNS answer (checked on the connection made) or by redirect, no proxy, 15 s and a
   size limit per request. **Opening a signed file used to go online by itself** (revocation, and Windows fetching missing issuers from what
   a file's certificates name, a way for a file to probe the local network): it no longer does, and signing no longer does either.

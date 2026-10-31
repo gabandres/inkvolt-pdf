@@ -24,7 +24,7 @@ internal static class LtvDialogs
         var timestamp = dlg.AddCheck("Also add a document timestamp (PAdES B-LTA)");
         var url = dlg.AddText("Timestamp server", SignDialog.ChosenTimestampUrl(s));
         url.IsEnabled = false;
-        dlg.AddNote($"You choose the server: it must start with https://. It {LtvPlan.WhatIsSent(LtvAddressKind.Timestamp)}. A signature with no timestamp of its own takes two.");
+        dlg.AddNote($"Sectigo's free server is suggested; you can enter another that starts with https://. It {LtvPlan.WhatIsSent(LtvAddressKind.Timestamp)}. A signature with no timestamp of its own takes two.");
         timestamp.Click += (_, _) => url.IsEnabled = timestamp.IsChecked == true;
         dlg.AddNote(NothingElse);
         dlg.Validate(() =>

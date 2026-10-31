@@ -12,7 +12,7 @@ Each release gets a `## x.y.z` heading before it's packed (`packaging/pack-msix.
 - Long-term validation: Add Verification Information stores in a signed file the proof that each certificate was good, so its signatures can still be checked after the certificates expire. It can add a document timestamp too (PAdES B-LTA), and Sign Digitally can do all of it as it signs. It's part of Inkvolt Pro.
 - Before any of that goes online, you see every address that will be contacted and what it gets. Addresses on your PC or local network are never contacted, whatever a file's certificates say.
 - Opening a signed file no longer goes online at all, where it used to check revocation by itself. Check Signatures Online does it when you ask, and a signature's details now say what the file holds for checking it later.
-- There is no default timestamp server any more: you enter the one you choose, and it must use https.
+- Timestamps now go over https only. Sectigo's free server is suggested, and you can enter another. Nothing is contacted unless you add a timestamp.
 - A locked form field's appearance swapped in a later update now shows as a change the signature doesn't allow, not only a changed value.
 
 ## 1.4.0

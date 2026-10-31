@@ -147,6 +147,21 @@ public class LtvTests
     }
 
     [Fact]
+    public void The_suggested_timestamp_server_is_one_the_rules_accept() =>
+        Assert.Null(LtvClient.WhyRefused(LtvPlan.SuggestedTimestampServer, LtvAddressKind.Timestamp));
+
+    /// <summary>The real suggested server, opt-in (INKVOLTPDF_REAL_TSA set): it gets a hash of a test signature.</summary>
+    [Fact]
+    public async Task The_suggested_timestamp_server_answers_and_its_timestamp_verifies()
+    {
+        if (Environment.GetEnvironmentVariable("INKVOLTPDF_REAL_TSA") is not { Length: > 0 }) return;
+        using var pki = new LtvTestPki();
+        using var real = new LtvClient();
+        var stamped = await Signing.SignAsync(TestPdf.Make(1), null, new SignRequest { Certificate = pki.Signer, Timestamp = real.TimestampSender(LtvPlan.SuggestedTimestampServer) });
+        Assert.Equal(PadesLevel.BT, First(stamped, pki).LongTerm!.Level);
+    }
+
+    [Fact]
     public async Task Verification_information_works_on_every_signature_in_a_file()
     {
         using var pki = new LtvTestPki();

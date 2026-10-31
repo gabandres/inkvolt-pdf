@@ -221,7 +221,7 @@ Installing Inkvolt PDF and Inkvolt Print together (one Start Menu folder, each a
   as it signs (B-LT, B-LTA). **Check Signatures Online…** asks about the certificates without changing the file (free).
   These are the only reasons this feature goes online, and each first lists every address it would contact and what that
   address gets. Only the addresses the certificates name are asked, http or https as they name them, and the timestamp
-  server you enter, https only, with no default. Addresses on this PC or a local network (private, loopback, link-local,
+  server in the field, https only: Sectigo's free one is suggested and you can enter another. Addresses on this PC or a local network (private, loopback, link-local,
   by name or by what a name resolves to, also through redirects) are never contacted. Each request is limited in time and
   size. With no connection it fails with a message and nothing is written.
 - **Sign Digitally** (Review menu, the Sign button, or clicking an empty signature field): pick a digital ID from the

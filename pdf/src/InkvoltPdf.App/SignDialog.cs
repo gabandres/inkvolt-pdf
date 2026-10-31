@@ -159,7 +159,7 @@ public static class SignDialog
 
         var timestamp = dlg.AddCheck("Add a trusted timestamp", s.SignTimestamp);
         var tsaUrl = dlg.AddText("Timestamp server", ChosenTimestampUrl(s));
-        dlg.AddNote("You choose the server: it must start with https://. It receives only a hash of the signature, never the document.");
+        dlg.AddNote("Sectigo's free server is suggested; you can enter another that starts with https://. It is contacted only if you add a timestamp, and receives only a hash of the signature, never the document.");
         var longTerm = dlg.AddChoice("Long-term validation", ["None", "Store revocation data (PAdES B-LT)", "Store revocation data, add a document timestamp (PAdES B-LTA)"],
             Pro.Allows(ProFeature.LongTermValidation) ? Math.Clamp(s.SignLongTerm, 0, 2) : 0);
         if (Pro.Allows(ProFeature.LongTermValidation))
@@ -238,7 +238,8 @@ public static class SignDialog
     }
 
     /// <summary>The timestamp server the person entered. The address that came filled in before there was no default is in many settings files: it doesn't count as chosen.</summary>
-    internal static string ChosenTimestampUrl(AppSettings s) => s.TimestampUrl == "http://timestamp.digicert.com" ? "" : s.TimestampUrl;
+    internal static string ChosenTimestampUrl(AppSettings s) =>
+        s.TimestampUrl is "" or "http://timestamp.digicert.com" ? LtvPlan.SuggestedTimestampServer : s.TimestampUrl;
 
     private static X509Certificate2? LoadPfx(Window owner)
     {
