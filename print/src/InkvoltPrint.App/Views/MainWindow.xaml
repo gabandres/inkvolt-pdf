@@ -246,6 +246,10 @@
                                             AutomationProperties.HelpText="Accept the device that now answers at this address as this printer, after a repair or reset gave it a new ID"
                                             Visibility="{Binding IsElsewhere, Converter={StaticResource VisibleWhen}}" />
                                 </StackPanel>
+                                <!-- A queue printer that answers but is paused or in trouble: Windows' side may be what's wrong -->
+                                <Button Content="Fix it…" Command="{Binding OpenFixerCommand}" HorizontalAlignment="Left" Margin="0,12,0,0"
+                                        AutomationProperties.Name="Fix printing problems"
+                                        Visibility="{Binding ShowQueueFix, Converter={StaticResource VisibleWhen}}" />
                             </StackPanel>
                         </DockPanel>
                     </Border>

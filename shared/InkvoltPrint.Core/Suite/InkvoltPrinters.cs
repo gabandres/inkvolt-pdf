@@ -43,6 +43,9 @@ public sealed class InkvoltPrinters
     /// <summary>Ids the user removed from the printer list (queues, scanners, printers).</summary>
     public IReadOnlyList<string> Forgotten { get; init; } = [];
 
+    /// <summary>The Pro key kept in the state file, when it couldn't be moved to the file both apps share (<see cref="ProKeyFile"/>).</summary>
+    public string? ProKey { get; init; }
+
     /// <summary>
     /// Reads <paramref name="path"/>, or by default Inkvolt Print's current state file wherever it is installed: unpackaged
     /// (<see cref="DefaultPath"/>) or packaged, whose writes Windows keeps in the package's folder
@@ -92,7 +95,11 @@ public sealed class InkvoltPrinters
                 foreach (var kv in map.EnumerateObject())
                     if (kv.Value.ValueKind == JsonValueKind.String && kv.Value.GetString() is { Length: > 0 } q)
                         queues[kv.Name] = q;
-            return new InkvoltPrinters(printers, queues) { Forgotten = Strings(doc.RootElement, "ForgottenUuids") };
+            return new InkvoltPrinters(printers, queues)
+            {
+                Forgotten = Strings(doc.RootElement, "ForgottenUuids"),
+                ProKey = Str(doc.RootElement, "ProKey") is { Length: > 0 } key ? key : null,
+            };
         }
         catch (JsonException)
         {

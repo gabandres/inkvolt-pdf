@@ -183,7 +183,7 @@ public static class FleetReader
     };
 
     /// <summary>How a queue is connected, without the server's or port's name.</summary>
-    private static string ConnectionWord(QueueConnection c) => c switch
+    public static string ConnectionWord(QueueConnection c) => c switch
     {
         QueueConnection.Usb => "USB",
         QueueConnection.Network => "Network",
