@@ -44,6 +44,11 @@ public sealed partial class BatchPrintViewModel(IBatchQueue queue, IBatchDocumen
         nameof(MoveUpCommand), nameof(MoveDownCommand), nameof(RemoveCommand), nameof(OpenListCommand), nameof(WatchFolderCommand), nameof(EnterPasswordCommand))]
     public partial bool IsSending { get; set; }
 
+    partial void OnIsSendingChanged(bool value)
+    {
+        foreach (var row in Rows) row.SendingChanged();
+    }
+
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsFree))]
     [NotifyCanExecuteChangedFor(nameof(PrintCommand), nameof(CheckAgainCommand), nameof(StartOverCommand), nameof(EnterPasswordCommand))]
@@ -94,6 +99,11 @@ public sealed partial class BatchPrintViewModel(IBatchQueue queue, IBatchDocumen
 
     partial void OnAllPaperChanged(BatchPaper value)
     {
+        if (value is null) // the box lost its item for a moment
+        {
+            AllPaper = DefaultPaper;
+            return;
+        }
         foreach (var row in Rows.Where(r => r.Editable)) row.Paper = value;
     }
 
@@ -161,10 +171,14 @@ public sealed partial class BatchPrintViewModel(IBatchQueue queue, IBatchDocumen
         }
         _infoRead = _info is not null;
         CanTwoSided = _info?.CanTwoSided ?? true;
-        var keep = AllPaper;
-        foreach (var extra in Papers.Skip(1).ToList()) Papers.Remove(extra);
-        foreach (var paper in _info?.Papers ?? []) Papers.Add(paper);
-        AllPaper = Papers.FirstOrDefault(p => p.Key == keep.Key) ?? DefaultPaper;
+        // Only when they differ: taking the selected item out of a box clears its selection.
+        if (_info is { } read && !read.Papers.SequenceEqual(Papers.Skip(1)))
+        {
+            var keep = AllPaper;
+            foreach (var extra in Papers.Skip(1).ToList()) Papers.Remove(extra);
+            foreach (var paper in read.Papers) Papers.Add(paper);
+            AllPaper = Papers.FirstOrDefault(p => p.Key == keep.Key) ?? DefaultPaper;
+        }
         foreach (var row in Rows) row.Refresh(_info);
         RowChanged();
         return _info;
@@ -275,14 +289,19 @@ public sealed partial class BatchPrintViewModel(IBatchQueue queue, IBatchDocumen
             while (Rows.FirstOrDefault(r => r.Measure is null) is { } row)
             {
                 Progress = $"Looking at {BatchPrintText.Clean(row.Name)}…";
-                var measure = await BatchMeasurer.MeasureAsync(row.Path, row.Password, documents, AskPasswordAsync, null, _estimate.Token);
-                row.Measured(measure, _info);
-                RowChanged();
+                try
+                {
+                    var measure = await BatchMeasurer.MeasureAsync(row.Path, row.Password, documents, AskPasswordAsync, null, _estimate.Token);
+                    row.Measured(measure, _info);
+                    RowChanged();
+                }
+                catch (OperationCanceledException)
+                {
+                    // The list was cleared while looking; a saved list may have taken its place, so this goes on with what's there.
+                    _estimate.Dispose();
+                    _estimate = new CancellationTokenSource();
+                }
             }
-        }
-        catch (OperationCanceledException)
-        {
-            // cleared while looking
         }
         finally
         {
@@ -382,7 +401,7 @@ public sealed partial class BatchPrintViewModel(IBatchQueue queue, IBatchDocumen
             SetMessage("This printer isn't set up in Windows yet. Press Set up at the top of the page, then print again.", error: true);
             return;
         }
-        var rows = Rows.Where(r => r.StillToSend).ToList();
+        var rows = Rows.Where(r => r.StillToSend && r.Measure is not null).ToList();
         foreach (var row in rows) row.Refresh(info);
         var sheets = rows.Sum(r => r.Line?.Sheets ?? 0);
         if (sheets > BatchPrintLimits.ConfirmSheets
@@ -491,12 +510,12 @@ public sealed partial class BatchPrintViewModel(IBatchQueue queue, IBatchDocumen
             List<BatchListEntry> entries;
             try
             {
-                entries = BatchPrintList.Load(path, allowNetwork: false);
+                entries = await Task.Run(() => BatchPrintList.Load(path, allowNetwork: false));
             }
             catch (BatchListNetworkException ex)
             {
                 if (!Prompt.Ask($"Open files on other computers?\n{ex.Message} Opening them shares this PC's sign-in with those computers. Do this only for a list you trust.", "Open them")) return;
-                entries = BatchPrintList.Load(path, allowNetwork: true);
+                entries = await Task.Run(() => BatchPrintList.Load(path, allowNetwork: true));
             }
             var files = await Task.Run(() => BatchPrintList.Expand(entries));
             if (Rows.Count > 0 && !Prompt.Ask("Replace the list?\nThe files on the list now, and their results, make way for the saved list's.", "Replace")) return;
@@ -516,7 +535,7 @@ public sealed partial class BatchPrintViewModel(IBatchQueue queue, IBatchDocumen
     [RelayCommand(CanExecute = nameof(HasResults))]
     private void ExportResults()
     {
-        var results = Rows.Where(r => r.Result is not null).Select((r, i) => r.Result! with { Index = Rows.IndexOf(r) }).ToList();
+        var results = Rows.Select((r, i) => r.Result is { } result ? result with { Index = i } : null).OfType<BatchPrintResult>().ToList();
         if (BatchPrintCsv.Export(results) is not { } csv)
         {
             ProAllows();
@@ -609,6 +628,14 @@ public sealed partial class BatchPrintViewModel(IBatchQueue queue, IBatchDocumen
         if (WatchLines.Count > MaxWatchLines) WatchLines.RemoveAt(WatchLines.Count - 1);
     }
 
+    /// <summary>The printer was removed from the list: nothing more goes to it. A job already handed over finishes.</summary>
+    public void Stopped()
+    {
+        _estimate?.Cancel();
+        _run?.Cancel();
+        _watch?.Cancel();
+    }
+
     private bool Watching() => WatchedFolder is not null;
 
     [RelayCommand(CanExecute = nameof(Watching))]
@@ -664,7 +691,13 @@ public sealed partial class BatchRowViewModel : ObservableObject
     /// <summary>Check again may look at it again: a file that may be in the queue stays as it is, unless the person starts over.</summary>
     public bool CanCheckAgain => Result is not { State: BatchPrintState.Sent } and not { MayHaveSent: true };
 
-    public bool Editable => StillToSend;
+    /// <summary>Its settings can be changed: not once it's sent, nor while a batch runs (what's on screen would no longer be what's sent).</summary>
+    public bool Editable => StillToSend && !_owner.IsSending;
+
+    /// <summary>The side is offered when the printer has it, and always for a row asking for it, so it can be turned off.</summary>
+    public bool ShowTwoSided => _twoSided || _info?.CanTwoSided != false;
+
+    internal void SendingChanged() => OnPropertyChanged(nameof(Editable));
     public bool NeedsPassword => Measure?.State is BatchMeasureState.NeedsPassword or BatchMeasureState.WrongPassword;
 
     public BatchPrintSettings Settings => new(_copies, string.IsNullOrWhiteSpace(_range) ? null : _range, _twoSided, _paperKey);
@@ -700,10 +733,12 @@ public sealed partial class BatchRowViewModel : ObservableObject
 
     public BatchPaper Paper
     {
-        get => Papers.FirstOrDefault(p => p.Key == (_paperKey ?? "")) ?? BatchPrintViewModel.DefaultPaper;
+        // A paper this printer doesn't have (from a list, or another printer's) stays itself: the box is blank and the row says why, never "default".
+        get => Papers.FirstOrDefault(p => string.Equals(p.Key, _paperKey ?? "", StringComparison.OrdinalIgnoreCase)) ?? new BatchPaper(_paperKey!, _paperKey!);
         set
         {
-            var key = value is null || value.Key.Length == 0 ? null : value.Key;
+            if (value is null) return; // the box lost its item for a moment: the file's paper hasn't changed
+            var key = value.Key.Length == 0 ? null : value.Key;
             if (_paperKey == key) return;
             _paperKey = key;
             OnPropertyChanged();
@@ -808,6 +843,8 @@ public sealed partial class BatchRowViewModel : ObservableObject
 
     private void Notify()
     {
+        OnPropertyChanged(nameof(Paper));
+        OnPropertyChanged(nameof(ShowTwoSided));
         OnPropertyChanged(nameof(SheetsText));
         OnPropertyChanged(nameof(Message));
         OnPropertyChanged(nameof(StateText));

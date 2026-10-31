@@ -169,8 +169,11 @@ public class BatchPrintEndToEndTests
         Write("1 not a pdf.pdf", "this is no PDF at all"u8.ToArray());
         Write("2 not a picture.jpg", "this is no JPEG at all"u8.ToArray());
         Write("3 truncated.pdf", BatchPrintSamples.Pdf(2, "Cut")[..40]);
+        // A file of a few bytes whose header, with a right checksum, claims 40,000 × 40,000 pixels.
         var huge = BatchPrintSamples.Png(1, 1);
-        huge[16] = 0x7F; // IHDR's width: about two billion pixels wide, from a file of a few bytes
+        System.Buffers.Binary.BinaryPrimitives.WriteInt32BigEndian(huge.AsSpan(16), 40_000);
+        System.Buffers.Binary.BinaryPrimitives.WriteInt32BigEndian(huge.AsSpan(20), 40_000);
+        System.Buffers.Binary.BinaryPrimitives.WriteUInt32BigEndian(huge.AsSpan(29), BatchPrintSamples.Crc32(huge.AsSpan(12, 17)));
         Write("4 huge.png", huge);
         Write("5 good.pdf", BatchPrintSamples.Pdf(1, "Good"));
         Write("6 really a pdf.jpg", BatchPrintSamples.Pdf(2, "Disguised")); // what it is decides, not its name
@@ -180,6 +183,7 @@ public class BatchPrintEndToEndTests
         Assert.True(code == BatchPrintSummary.SomeFailed, $"exit {code}\n{output}\n{error}");
         Assert.Contains("2 sent (3 sheets), 4 skipped.", output);
         foreach (var name in new[] { "1 not a pdf.pdf", "2 not a picture.jpg", "3 truncated.pdf", "4 huge.png" }) Assert.Contains($"left out {name}", error);
+        Assert.Contains("too large", error); // refused by its header's size, before any pixel
     }
 
     [Fact]

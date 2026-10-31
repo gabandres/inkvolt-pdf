@@ -53,7 +53,7 @@ public sealed record BatchFolderSummary(int Sent, int Failed, int SheetsSent, st
 
 /// <summary>The folder is watched already (by the app or a command line): two watchers would race for its files.</summary>
 public sealed class BatchFolderBusyException(string folder)
-    : IOException($"{BatchPrintText.Clean(folder)} is already watched by another Inkvolt Print (the app or a command line). Stop that one first.");
+    : IOException($"{BatchPrintText.Clean(folder)} is already watched (by Inkvolt Print or Inkvolt PDF, the app or a command line). Stop that one first.");
 
 /// <summary>
 /// A folder printed as it fills: each PDF or picture that lands at its top is printed once when it's complete, then the original
@@ -66,7 +66,6 @@ public sealed class BatchFolderBusyException(string folder)
 public static class BatchPrintFolder
 {
     public const string LogName = "inkvolt-print.log";
-    private const string LockName = ".inkvolt-print.lock";
 
     /// <summary>What is wrong with watching this folder, or null.</summary>
     public static string? Validate(string folder)
@@ -91,7 +90,7 @@ public static class BatchPrintFolder
         folder = Path.TrimEndingDirectorySeparator(Path.GetFullPath(folder));
         if (Validate(folder) is { } folderError) throw new ArgumentException(folderError, nameof(folder));
 
-        using var held = DropFolder.Lock(folder, LockName) ?? throw new BatchFolderBusyException(folder);
+        using var held = DropFolder.Lock(folder, DropFolder.LockName) ?? throw new BatchFolderBusyException(folder);
         var working = Directory.CreateDirectory(Path.Combine(folder, DropFolder.WorkingFolder)).FullName;
         Directory.CreateDirectory(Path.Combine(folder, DropFolder.DoneFolder));
         Directory.CreateDirectory(Path.Combine(folder, DropFolder.FailedFolder));

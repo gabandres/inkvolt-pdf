@@ -542,7 +542,7 @@ public class BatchPrintTests
         var second = await Run(again, queue);
         Assert.Equal(lines.Select(l => l.Name), queue.Sent.Select(j => j.Name));
         Assert.Equal(4, second.Sent);
-        Assert.Empty(second.Items.Where(r => r.StillToSend));
+        Assert.DoesNotContain(second.Items, r => r.StillToSend);
     }
 
     [Fact]
@@ -988,6 +988,17 @@ public class BatchPrintFolderTests
         await Assert.ThrowsAsync<BatchFolderBusyException>(() => Run(f, new FakeQueue()));
         await stop.CancelAsync();
         await run;
+    }
+
+    [Fact]
+    public async Task A_folder_inkvolt_pdf_watches_is_refused_too()
+    {
+        // Both apps use "working", and each takes what's left there as interrupted: they must not share a folder.
+        using var f = new BatchFolder();
+        using var held = DropFolder.Lock(f.Root, DropFolder.LockName);
+        Assert.NotNull(held);
+        await Assert.ThrowsAsync<BatchFolderBusyException>(() => Run(f, new FakeQueue()));
+        Assert.Equal(".inkvolt-watch.lock", DropFolder.LockName); // the name Inkvolt PDF already used: an older copy of it still sees the lock
     }
 
     [Fact]

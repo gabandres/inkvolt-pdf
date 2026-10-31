@@ -165,7 +165,7 @@ internal static class BatchPrintSamples
         png.Write(number);
     }
 
-    private static uint Crc32(ReadOnlySpan<byte> bytes)
+    internal static uint Crc32(ReadOnlySpan<byte> bytes)
     {
         var crc = 0xFFFFFFFFu;
         foreach (var b in bytes)

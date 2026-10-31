@@ -11,6 +11,9 @@ public static class DropFolder
 {
     public const string DoneFolder = "done", FailedFolder = "failed", WorkingFolder = "working";
 
+    /// <summary>The one lock file, whichever app watches: both use "working", and each takes what's left there as interrupted.</summary>
+    public const string LockName = ".inkvolt-watch.lock";
+
     /// <summary>The files at the top of the folder that <paramref name="isSupported"/> takes (not hidden, not temporary, not Office's "~$" owner files).</summary>
     public static IEnumerable<FileInfo> Candidates(string folder, Func<string, bool> isSupported)
     {

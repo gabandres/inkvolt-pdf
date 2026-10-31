@@ -60,7 +60,7 @@ public static class WatchedFolder
 {
     public const string DoneFolder = DropFolder.DoneFolder, FailedFolder = DropFolder.FailedFolder, WorkingFolder = DropFolder.WorkingFolder, ResultsFolder = "results";
     public const string LogName = "inkvolt-watch.log";
-    private const string LockName = ".inkvolt-watch.lock";
+    private const string LockName = DropFolder.LockName;
 
     /// <summary>The results folder a watched folder uses when its preset names none.</summary>
     public static string DefaultOutput(string folder) => Path.Combine(folder, ResultsFolder);

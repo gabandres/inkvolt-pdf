@@ -1267,6 +1267,7 @@ public sealed partial class PrinterViewModel : ObservableObject, IDisposable
     public Task OpenPdfAsync(string path)
     {
         SelectedSection = PrintSection;
+        Print.ShowBatch = false;
         return Print.OpenAsync(path);
     }
 
@@ -1290,6 +1291,7 @@ public sealed partial class PrinterViewModel : ObservableObject, IDisposable
 
     public void Dispose()
     {
+        Print.Batch?.Stopped();
         Jobs.SetVisible(false);
         _loop?.Cancel();
         _loop = null;

@@ -326,11 +326,25 @@ public partial class MainWindow : Window
     private void Window_DragOver(object sender, DragEventArgs e)
     {
         var files = Dropped(e);
-        e.Effects = (DroppedPdf(files) is not null || DroppedPictures(files).Count > 0 || files.Any(Directory.Exists)) && Vm?.Selected is not null ? DragDropEffects.Copy : DragDropEffects.None;
+        e.Effects = (DroppedPdf(files) is not null || DroppedPictures(files).Count > 0 || HasFolder(files)) && Vm?.Selected is not null ? DragDropEffects.Copy : DragDropEffects.None;
         e.Handled = true;
     }
 
-    /// <summary>Drop a PDF anywhere on the window: it opens in the selected printer's Print section. Pictures go to Photos.</summary>
+    private (string? First, bool Folder) _dragged;
+
+    /// <summary>
+    /// Is a folder being dragged? Asked as the mouse moves, on the UI thread, so asked once per drag and never of another computer
+    /// (a server that's off would hold the window): there, a name without an extension counts as one.
+    /// </summary>
+    private bool HasFolder(string[] files)
+    {
+        if (files.Length == 0) return false;
+        if (_dragged.First != files[0])
+            _dragged = (files[0], files.Any(f => f.StartsWith(@"\\", StringComparison.Ordinal) ? !Path.HasExtension(f) : Directory.Exists(f)));
+        return _dragged.Folder;
+    }
+
+    /// <summary>Drop a PDF anywhere on the window: it opens in the selected printer's Print section. Pictures go to Photos. A folder or several PDFs go to Batch.</summary>
     private async void Window_Drop(object sender, DragEventArgs e)
     {
         try
@@ -338,7 +352,8 @@ public partial class MainWindow : Window
             var files = Dropped(e);
             if (Vm?.Selected is not { } printer) return;
             // A folder, several PDFs, or anything printable while Batch shows: all of it goes to the batch, none is quietly left out.
-            if (printer.CanPrint && (files.Any(Directory.Exists) || files.Count(f => f.EndsWith(".pdf", StringComparison.OrdinalIgnoreCase)) > 1
+            var anyFolder = await Task.Run(() => files.Any(Directory.Exists));
+            if (printer.CanPrint && (anyFolder || files.Count(f => f.EndsWith(".pdf", StringComparison.OrdinalIgnoreCase)) > 1
                                      || (printer.SelectedSection == PrinterViewModel.PrintSection && printer.Print.ShowBatch)))
                 await printer.OpenBatchAsync(files);
             else if (DroppedPdf(files) is { } path && File.Exists(path)) await printer.OpenPdfAsync(path);

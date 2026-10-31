@@ -756,6 +756,7 @@
                 <RadioButton Content="Batch" GroupName="printmode" IsChecked="{Binding ShowBatch}" MinWidth="0"
                              ToolTip="Many PDFs and pictures, or a folder: see the sheets before anything prints" />
             </StackPanel>
+            <Grid>
             <views:BatchPrintView DataContext="{Binding Batch}" Visibility="{Binding DataContext.ShowBatch, RelativeSource={RelativeSource AncestorType=DockPanel}, Converter={StaticResource VisibleWhen}}" />
             <Grid Margin="0,0,16,16" Visibility="{Binding ShowBatch, Converter={StaticResource VisibleWhen}, ConverterParameter=invert}">
                 <Grid.ColumnDefinitions>
@@ -897,6 +898,7 @@
                         </ScrollViewer>
                     </Grid>
                 </Border>
+            </Grid>
             </Grid>
             </DockPanel>
         </DataTemplate>
