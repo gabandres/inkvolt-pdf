@@ -2,10 +2,25 @@
 
 **Owner decision.** Windows only for now: the Mac isn't up, so nothing waits for it and parity is on hold (`pdf/ROADMAP.md`
 "Mac on hold"). The Mac items below stay listed for when it is back; skip them. The next Windows items are in the night's list
-below, 3.3 now done.
+below, 3.3, 3.4 and 3.5 now done. Timestamp servers: https only, Sectigo's free one suggested (only http from DigiCert, SSL.com and
+GlobalSign when probed); not yet confirmed that Acrobat trusts its timestamps. The privacy policy is updated and live (timestamps,
+certificate checks, the Mac's AI assistant). The folder index keeps a changed file's old text about 2 minutes until compaction: accepted
+for now, though just-redacted text lingers on the PC that long.
 
-**On master, not released.** Windows 3.3 Compare: Office files and scans on either side, formatting and moves apart from wording,
-scans aligned, visual differences in the annotated copy; the 30 planted changes pass (`pdf/ROADMAP.md` 3.3).
+**On master, not released.** All three are in `pdf/WHATS-NEW.md`'s Next; each has its checks and limits in `pdf/ROADMAP.md`.
+- 3.3 Compare: Office files and scans on either side, formatting and moves apart from wording, scans aligned, visual differences in
+  the annotated copy; the 30 planted changes pass. Not run on a real scan.
+- 3.4 Long-term validation: PAdES B-LT and B-LTA pass EU DSS run locally (`pdf/tools/pades-check`). Not checked: Acrobat's "LTV enabled",
+  real certificate authorities, smart cards. Certifying with a choice of fields to lock isn't built.
+- 3.5 Folder search: 10,000 generated PDFs, a word in 3-114 ms, a changed file found in 3.4 s. Not checked: real PDFs at that scale, a
+  hostile PDF, an MSIX install, network drives, OneDrive placeholders. One run took 569 s to index, not explained; a two-word phrase
+  takes 3-4 s to list 500 pages.
+
+**Next (Windows).** A release of these three (the owner hasn't asked yet), then Print waves 2-3, Report a problem, WIA PDF-only scanners,
+TWAIN and black-and-white in Scan, 3.1, 2.1 leftovers, UX still-short items.
+
+**Tests.** Timing tests still fail now and then under load, a different one each full run (`ThreadClockTests`, `FindWorkerTests`,
+`HugeStringsAreRefused…`); each passes alone.
 
 **Small fixes queued, new.** Windows' recognizer can skip a whole line that is on the page (seen on a synthetic scan, with or
 without cleanup): `ScanText` could re-read bands with ink and no words, which would help Recognize Text too. A script step whose
@@ -45,7 +60,7 @@ and a page that crashes MuPDF natively is re-read in the app's process. A partly
 ahead of the command line (`main.swift:8`).
 
 **Only a person.** Look at the new Mac UI (PLAN.md lists it per step; `/Applications/Inkvolt PDF.app` on the Mac may be a
-branch's build). The privacy policy should mention the Mac's AI assistant. Never run: real Ollama, LM Studio or https from
+branch's build). Never run: real Ollama, LM Studio or https from
 the Mac, a key saved to the login keychain, LibreOffice on Windows, a real screen reader on the HTML, OCR on a real scan.
 
 **How it ran.** Usage without tokens: `(claude -p "/usage" --output-format json | ConvertFrom-Json).result` in PowerShell.
