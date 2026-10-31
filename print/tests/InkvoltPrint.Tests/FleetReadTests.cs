@@ -74,13 +74,21 @@ public sealed class FleetReadTests : IDisposable
 
     private static IFleetPc DemoPc() => new DemoFleetPc(DemoNetwork, DemoSnmp(), new FakeWiaSystem(DemoFleet.Scanners((_, _) => [])));
 
-    // The demo PC's nine entries, as the Fleet page and status --all list them: the three that need attention (two toners low and
-    // a paused queue), then the two that can't be reached (the office laser's old address, the PC sharing Front desk), then the rest.
+    // The demo PC's nine entries, as the Fleet page and status --all list them: the five that need attention (low ink, paper or
+    // toner, a paused queue), by name; then the two that can't be reached (the office laser's old address, the PC sharing Front
+    // desk); then the two that are fine. Connected printers go by the name they report, as on the sidebar.
     private static readonly string[] NineInOrder =
     [
-        "Demo Laser 5200 Series", "Demo USB laser", "Demo inkjet", "Office color MFP",
+        "Demo inkjet", "Demo Laser 5200 Series", "Demo USB laser", "HP Color LaserJet Pro MFP 3302", "Office color MFP",
         "Demo office laser", "Front desk on demo-pc",
-        "Demo Photo Scanner 40", "Demo color laser (CDM)", "HP LaserJet MFP M234dw",
+        "Demo Photo Scanner 40", "HP LaserJet MFP M234dw",
+    ];
+
+    private static readonly FleetTrouble[] NineTroubles =
+    [
+        FleetTrouble.Warning, FleetTrouble.Warning, FleetTrouble.Warning, FleetTrouble.Warning, FleetTrouble.Warning,
+        FleetTrouble.Offline, FleetTrouble.Offline,
+        FleetTrouble.Ok, FleetTrouble.Ok,
     ];
 
     [Fact]
@@ -91,8 +99,7 @@ public sealed class FleetReadTests : IDisposable
         Assert.Empty(read.Notes);
         var rows = FleetPage.Rows(read.Printers, Now);
         Assert.Equal(NineInOrder, rows.Select(r => r.Printer.Name));
-        // Each level in the order the list shows.
-        Assert.Equal(rows.Select(r => r.Printer.Trouble).Order(), rows.Select(r => r.Printer.Trouble));
+        Assert.Equal(NineTroubles, rows.Select(r => r.Printer.Trouble));
     }
 
     [Fact]
@@ -121,7 +128,7 @@ public sealed class FleetReadTests : IDisposable
         Assert.Contains("Firmware", inkjet.FirmwareText);
 
         var mfp = rows["Office color MFP"];
-        Assert.Equal(4, mfp.Supplies.Count); // over SNMP, through the queue's port
+        Assert.Equal(5, mfp.Supplies.Count); // four toners and its waste box, over SNMP, through the queue's port
         Assert.Contains(mfp.Supplies, s => s.IsLow);
 
         var scanner = rows["Demo Photo Scanner 40"];
@@ -147,7 +154,7 @@ public sealed class FleetReadTests : IDisposable
         };
         var names = (await FleetReader.ReadAllAsync(pc, Now)).Printers.Select(p => p.Name).ToList();
         Assert.DoesNotContain("Demo USB laser", names);
-        Assert.Contains("Demo color laser (CDM)", names); // remembered: Hidden is only for what Windows lists
+        Assert.Contains("HP Color LaserJet Pro MFP 3302", names); // remembered: Hidden is only for what Windows lists
     }
 
     [Fact]
@@ -181,15 +188,17 @@ public sealed class FleetReadTests : IDisposable
         var snmpOnly = new HostRouter(new Dictionary<string, HttpMessageHandler>());
 
         var printers = new List<FleetPrinter>();
-        foreach (var (name, transport, snmp, device) in new (string, HttpMessageHandler, ISnmpTransport, SnmpDevice?)[]
+        const string planted = "9f8e7d6c-5b4a-4c3d-8e2f-1a0b9c8d7e6f"; // the UUID the replies report: the printer is known by it, and it stays out too
+        foreach (var (id, name, transport, snmp, device) in new (string, string, HttpMessageHandler, ISnmpTransport, SnmpDevice?)[]
                  {
-                     ("LEDM printer", ledm, new SnmpRouter(new Dictionary<string, ISnmpTransport>()), null),
-                     ("IPP printer", ipp, new SnmpRouter(new Dictionary<string, ISnmpTransport>()), null),
-                     ("SNMP printer", snmpOnly, new SnmpRouter(new Dictionary<string, ISnmpTransport> { [host] = new SnmpAgent(SnmpAgent.ParseWalk(RecordingTests.PlantedWalk())) }),
+                     (planted, "LEDM printer", ledm, new SnmpRouter(new Dictionary<string, ISnmpTransport>()), null),
+                     (planted, "IPP printer", ipp, new SnmpRouter(new Dictionary<string, ISnmpTransport>()), null),
+                     (PrinterId.Normalize(null, host), "SNMP printer", snmpOnly,
+                         new SnmpRouter(new Dictionary<string, ISnmpTransport> { [host] = new SnmpAgent(SnmpAgent.ParseWalk(RecordingTests.PlantedWalk())) }),
                          new SnmpDevice(null, null, null)),
                  })
         {
-            var known = new InkvoltPrinter(name, name, null, host, null) { Snmp = device };
+            var known = new InkvoltPrinter(id, name, null, host, null) { Snmp = device };
             var pc = new OnePrinterPc(known, () => transport, snmp);
             var read = await FleetReader.ReadAllAsync(pc, Now);
             var printer = Assert.Single(read.Printers);
@@ -198,8 +207,8 @@ public sealed class FleetReadTests : IDisposable
         }
 
         foreach (var text in new[] { FleetExport.Json(printers, [], Now, Me), FleetExport.Csv(printers, Now, Me) })
-            foreach (var planted in RecordingTests.Planted)
-                Assert.False(text.Contains(planted, StringComparison.OrdinalIgnoreCase), $"{planted} left in {text}");
+            foreach (var word in RecordingTests.Planted)
+                Assert.False(text.Contains(word, StringComparison.OrdinalIgnoreCase), $"{word} left in {text}");
     }
 
     private sealed class OnePrinterPc(InkvoltPrinter printer, Func<HttpMessageHandler> transport, ISnmpTransport snmp) : IFleetPc
@@ -423,7 +432,8 @@ public sealed class FleetReadTests : IDisposable
         Assert.Equal(FleetCommand.Done, code);
         var lines = output.Split(Environment.NewLine, StringSplitOptions.RemoveEmptyEntries);
         Assert.StartsWith("9 printers:", lines[0]);
-        Assert.Contains("Demo Laser 5200 Series", lines[1]);
+        Assert.Contains("Demo inkjet", lines[1]);
+        Assert.Contains("Demo Laser 5200 Series", lines[2]);
     }
 
     [Fact]
