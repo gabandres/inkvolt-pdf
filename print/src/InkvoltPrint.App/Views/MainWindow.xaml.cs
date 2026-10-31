@@ -55,6 +55,16 @@ public partial class MainWindow : Window
     private void OnVmChanged(object? sender, PropertyChangedEventArgs e)
     {
         if (e.PropertyName == nameof(MainViewModel.Selected) && IsLoaded) Motion.Enter(PrinterPane);
+        if (e.PropertyName == nameof(MainViewModel.IsFleetShown) && IsLoaded && Vm is { IsFleetShown: false })
+        {
+            Motion.Enter(PrinterPane);
+            // The Fleet page took the keyboard's place with it: back to the printer, on the list.
+            Dispatcher.BeginInvoke(DispatcherPriority.Loaded, () =>
+            {
+                if (Keyboard.FocusedElement is UIElement { IsVisible: true }) return;
+                (PrinterList.ItemContainerGenerator.ContainerFromItem(PrinterList.SelectedItem) as ListBoxItem)?.Focus();
+            });
+        }
     }
 
     // ───────────── The sidebar, folded on a narrow window or at a large Text size ─────────────

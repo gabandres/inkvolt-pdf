@@ -33,7 +33,10 @@ public sealed partial class FleetViewModel : ObservableObject
         _main = main;
         _pc = pc;
         _timer = new DispatcherTimer(DispatcherPriority.Background) { Interval = TimeSpan.FromSeconds(2) };
-        _timer.Tick += (_, _) => Refresh();
+        _timer.Tick += (_, _) =>
+        {
+            if (Application.Current?.MainWindow is { IsVisible: true }) Refresh(); // not while the window is in the notification area
+        };
     }
 
     public ObservableCollection<FleetRowViewModel> Rows { get; } = [];
@@ -82,7 +85,8 @@ public sealed partial class FleetViewModel : ObservableObject
             else
             {
                 if (at != i) Rows.Move(at, i);
-                Rows[i].Row = rows[i];
+                // Unchanged words leave the row's visuals alone: nothing is rebuilt every two seconds.
+                if (Rows[i].Row.AccessibleText != rows[i].AccessibleText) Rows[i].Row = rows[i];
             }
         }
         while (Rows.Count > rows.Count) Rows.RemoveAt(Rows.Count - 1);

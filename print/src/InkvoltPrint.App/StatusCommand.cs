@@ -50,7 +50,13 @@ internal static class StatusCommand
     /// <summary>Output to the redirected handles when there are some, else to the starting terminal's console.</summary>
     private static void UseConsole()
     {
-        if (Valid(GetStdHandle(StdOutput))) return; // a pipe or a file (a script, | Out-Default, a task's log)
+        if (Valid(GetStdHandle(StdOutput))) // a pipe or a file (a script, | Out-Default, a task's log): UTF-8, whatever a windowed app's code page is
+        {
+            var utf8 = new UTF8Encoding(false);
+            Console.SetOut(new StreamWriter(Console.OpenStandardOutput(), utf8) { AutoFlush = true });
+            Console.SetError(new StreamWriter(Console.OpenStandardError(), utf8) { AutoFlush = true });
+            return;
+        }
         if (!AttachConsole(AttachParentProcess)) return; // started from Explorer or a task: nowhere to write, the exit code tells
         var console = CreateFile("CONOUT$", GenericRead | GenericWrite, FileShareRead | FileShareWrite, IntPtr.Zero, OpenExisting, 0, IntPtr.Zero);
         if (!Valid(console)) return;

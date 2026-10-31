@@ -218,7 +218,7 @@ public class FleetTests
             Reachable = true,
             Status = new PrinterStatus("error", $"Ask jane.doe@contoso.com at {ip}", Severity.Error,
                 [new PrinterAlert("a", Severity.Error, $"Job from JDOE-LAPTOP ({mac}) {uuid}")]),
-            Supplies = [Supply($"Black serial {serial}", 50, color: "K")],
+            Supplies = [Supply($"Black serial {serial}", 50, color: "K"), Supply("Cyan", 50, state: serial, color: serial)],
             Firmware = $"TJP1FN2405AR {uuid}",
         });
 

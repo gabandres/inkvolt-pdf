@@ -115,7 +115,12 @@ public static class FleetExport
         Connection = Text(p.Connection, who),
         Status = Text(p.Status, who) ?? "Status not available",
         Problems = p.Problems.Select(t => Text(t, who)).OfType<string>().ToList(),
-        Supplies = p.Supplies.Select(s => s with { Name = Text(s.Name, who) ?? "Supply" }).ToList(),
+        Supplies = p.Supplies.Select(s => s with
+        {
+            Name = Text(s.Name, who) ?? "Supply",
+            Color = s.Color is null ? null : FleetText.Clean(Diagnostics.Scrub(s.Color, who), 24),
+            State = FleetText.Clean(Diagnostics.Scrub(s.State, who), 24) ?? "unknown",
+        }).ToList(),
         Firmware = FirmwareText(p.Firmware, who),
     };
 
