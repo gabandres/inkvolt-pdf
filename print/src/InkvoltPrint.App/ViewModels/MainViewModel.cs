@@ -118,6 +118,30 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
 
     public ObservableCollection<PrinterViewModel> Printers { get; } = [];
 
+    /// <summary>The Fleet page: every printer at once (roadmap 2.6). Made when first shown.</summary>
+    public FleetViewModel Fleet => _fleet ??= new FleetViewModel(this, _pc);
+
+    private FleetViewModel? _fleet;
+
+    /// <summary>The main pane shows the Fleet page instead of the selected printer.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ShowPrinterPane), nameof(ShowNoPrinterHint))]
+    public partial bool IsFleetShown { get; set; }
+
+    public bool ShowPrinterPane => Selected is not null && !IsFleetShown;
+    public bool ShowNoPrinterHint => Selected is null && !IsFleetShown;
+
+    partial void OnIsFleetShownChanged(bool value)
+    {
+        if (value) Fleet.Show();
+        else _fleet?.Hide();
+        // The queue card refreshes only while its printer is on screen.
+        if (Selected is { } shown) shown.IsShown = !value;
+    }
+
+    [RelayCommand]
+    private void ShowFleet() => IsFleetShown = true;
+
     /// <summary>Remembered printers and preferences (the tray's settings live there too).</summary>
     public AppState State => _state;
 
@@ -153,6 +177,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     }
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ShowPrinterPane), nameof(ShowNoPrinterHint))]
     public partial PrinterViewModel? Selected { get; set; }
 
     /// <summary>
@@ -357,7 +382,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     partial void OnSelectedChanged(PrinterViewModel? oldValue, PrinterViewModel? newValue)
     {
         if (oldValue is not null) oldValue.IsShown = false;
-        if (newValue is not null) newValue.IsShown = true;
+        if (newValue is not null) newValue.IsShown = !IsFleetShown;
     }
 
     private void Merge(IReadOnlyList<DiscoveredPrinter> found)
@@ -595,6 +620,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
 
     public void Dispose()
     {
+        _fleet?.Hide();
         _queueWatch.Cancel();
         _queueWatch.Dispose();
         _relist.Dispose();

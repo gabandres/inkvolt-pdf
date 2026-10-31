@@ -122,10 +122,10 @@ public static class FleetExport
     private static string? Text(string? text, Diagnostics.Identity who) =>
         text is null ? null : FleetText.Clean(Diagnostics.Scrub(text, who), FleetPrinter.MaxText);
 
-    /// <summary>A firmware version looks like a serial number to the scrubber, which keeps it after the word "Firmware".</summary>
+    /// <summary>A firmware version looks like a serial number or an address to the scrubber, which keeps it after the words "Firmware version".</summary>
     private static string? FirmwareText(string? firmware, Diagnostics.Identity who)
     {
-        const string label = "Firmware ";
+        const string label = "Firmware version ";
         if (firmware is null) return null;
         var scrubbed = Diagnostics.Scrub(label + firmware, who);
         return FleetText.Clean(scrubbed.StartsWith(label, StringComparison.Ordinal) ? scrubbed[label.Length..] : scrubbed, FleetPrinter.MaxText);

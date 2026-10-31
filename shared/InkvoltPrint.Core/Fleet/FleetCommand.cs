@@ -15,9 +15,9 @@ public static class FleetCommand
 
     private const string Usage = "Usage: inkvoltprint status --all [--json] [--out file]";
 
-    /// <summary>The arguments ask for this command, not for a window: the first one past <c>--demo</c> is <c>status</c>.</summary>
+    /// <summary>The arguments ask for this command, not for a window: the first one past the demo's own switches is <c>status</c>.</summary>
     public static bool IsFor(IReadOnlyList<string> args) =>
-        args.FirstOrDefault(a => a != "--demo") == "status";
+        args.FirstOrDefault(a => a is not ("--demo" or "--no-printers" or "--pro-enforce")) == "status";
 
     public static async Task<int> RunAsync(IReadOnlyList<string> args, TextWriter output, TextWriter error, IFleetPc pc, Func<DateTimeOffset> clock,
         Diagnostics.Identity who, CancellationToken ct)

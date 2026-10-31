@@ -230,6 +230,18 @@ public class FleetTests
         }
     }
 
+    [Theory]
+    [InlineData("2.84.1.3-202606111700 (2026-07-24)")] // four numbers: an address, to the scrubber, without the word in front of it
+    [InlineData("TJP1FN2405AR")]
+    [InlineData("05.12.XA01")]
+    [InlineData("2024-08-13")]
+    public void A_firmware_version_comes_through_as_the_printer_gave_it(string version)
+    {
+        var printer = Printer("P", firmware: version);
+        Assert.Contains(version, FleetExport.Json([printer], [], Now, Me));
+        Assert.Contains(version, FleetExport.Csv([printer], Now, Me));
+    }
+
     // ------------------------------------------------------------------ JSON
 
     private static JsonElement Schema()
