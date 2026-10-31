@@ -305,7 +305,7 @@ public static class PageBackground
         FillUnknown(levels, known, cols, rows);
         var map = new PaperLevel.Map(width, height, block, cols, rows, levels);
 
-        var white = Math.Clamp(1 - 3.8f * sigmaSmooth / paper, 0.86f, 0.97f);
+        var white = Math.Clamp(1 - 3.8f * sigmaSmooth / paper, 0.90f, 0.97f); // below 90% thin serifs go (ocr-corpus README)
         var strokes = Strokes(gray, width, height, map, Math.Max(MinStrokeContrast, 2.5f * sigmaRaw), Math.Max(8, MinStrokePixels * dpi / 300), cancel);
         var result = new byte[gray.Length];
         Parallel.For(0, height, options, y =>
