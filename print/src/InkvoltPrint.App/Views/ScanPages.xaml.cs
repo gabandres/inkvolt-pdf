@@ -44,6 +44,11 @@ public partial class ScanPages : UserControl
         {
             if (e.NewValue is true) Dispatcher.BeginInvoke(DispatcherPriority.Input, () => Cropper.Focus());
         };
+        // The clean up view takes the keyboard on its first choice, so Tab and Space work straight away.
+        FirstCleanChoice.IsVisibleChanged += (_, e) =>
+        {
+            if (e.NewValue is true) Dispatcher.BeginInvoke(DispatcherPriority.Input, () => FirstCleanChoice.Focus());
+        };
         PhotoBoxes.IsVisibleChanged += (_, e) =>
         {
             if (e.NewValue is true) Dispatcher.BeginInvoke(DispatcherPriority.Input, () => PhotoBoxes.Focus());

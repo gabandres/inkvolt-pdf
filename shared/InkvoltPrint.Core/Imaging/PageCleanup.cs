@@ -545,11 +545,13 @@ public static class Descreen
         var y1 = maxY == rows - 1 ? height : Math.Min(height, (maxY + 1) * block + fade);
         var (rw, rh) = (x1 - x0, y1 - y0);
 
-        var sigma = 0.55 * period;
-        var radius = Math.Max(1, (int)Math.Round((Math.Sqrt(4 * sigma * sigma + 1) - 1) / 2));
+        // Just enough to lose the dots (about 4% of their strength left), so type on a tint stays readable.
+        var sigma = 0.4 * period;
+        var radius = Math.Max(1, (int)(sigma * 0.7));
+        var passes = Math.Max(3, (int)Math.Ceiling(sigma * sigma / (radius * (radius + 1) / 3.0)));
         var blurred = new byte[rw * rh * channels];
         for (var y = 0; y < rh; y++) Buffer.BlockCopy(pixels, (y0 + y) * width * channels + x0 * channels, blurred, y * rw * channels, rw * channels);
-        for (var pass = 0; pass < 3; pass++)
+        for (var pass = 0; pass < passes; pass++)
         {
             cancel.ThrowIfCancellationRequested();
             BoxAcross(blurred, rw, rh, channels, radius, options);
@@ -616,7 +618,14 @@ public static class Descreen
         if (across == 0) return 0;
         var down = FirstPeak(block, maxLag, Samples, (line, i) => gray[(y0 + i) * width + x0 + (line * 2 + 1) * block / (Samples * 2)]);
         if (down == 0 || Math.Max(across, down) > 2 * Math.Min(across, down)) return 0;
-        return Math.Max(across, down);
+        // A screen at 45° repeats less often along a row than its dots lie apart; along the diagonal it says so. The dots' true wavelength.
+        var wave = Math.Max(across, down);
+        var diagonal = FirstPeak(block, maxLag, Samples, (line, i) =>
+        {
+            var start = (line * 2 + 1) * block / (Samples * 2);
+            return gray[(y0 + (start + i) % block) * width + x0 + i];
+        });
+        return diagonal > 0 ? (int)Math.Max(2, Math.Round(Math.Min(wave, diagonal * Math.Sqrt(2)))) : wave;
     }
 
     /// <summary>The first lag of at least 2 where sample lines correlate with themselves, at a local peak of correlation; 0 when none. Each line is measured against its own mean, so a line of one level says nothing.</summary>
@@ -659,7 +668,7 @@ public static class Descreen
                 for (var x = -radius; x <= radius; x++) sum += data[(y * w + Math.Clamp(x, 0, w - 1)) * channels + c];
                 for (var x = 0; x < w; x++)
                 {
-                    line[x] = sum / (2 * radius + 1);
+                    line[x] = (sum + radius) / (2 * radius + 1); // rounded: truncating darkens the page a level a pass
                     sum += data[(y * w + Math.Min(w - 1, x + radius + 1)) * channels + c] - data[(y * w + Math.Max(0, x - radius)) * channels + c];
                 }
                 for (var x = 0; x < w; x++) data[(y * w + x) * channels + c] = (byte)line[x];
@@ -678,7 +687,7 @@ public static class Descreen
                 for (var y = -radius; y <= radius; y++) sum += data[(Math.Clamp(y, 0, h - 1) * w + x) * channels + c];
                 for (var y = 0; y < h; y++)
                 {
-                    line[y] = sum / (2 * radius + 1);
+                    line[y] = (sum + radius) / (2 * radius + 1);
                     sum += data[(Math.Min(h - 1, y + radius + 1) * w + x) * channels + c] - data[(Math.Max(0, y - radius) * w + x) * channels + c];
                 }
                 for (var y = 0; y < h; y++) data[(y * w + x) * channels + c] = (byte)line[y];
