@@ -78,6 +78,9 @@ public static class PaperEdge
     private const int Contrast = 16;
     private const double MinSide = 1, MinShare = 0.25, MinFill = 0.92, Pad = 0.03, NothingToCrop = 0.99;
 
+    /// <summary>Marks this close (inches) belong together; dust is under <see cref="DustSide"/> inches on its shorter side.</summary>
+    private const double Together = 0.1, DustSide = 0.09;
+
     /// <summary>
     /// The sheet as a crop of the straightened page (<paramref name="deskew"/> degrees undone), or null when there is no edge to
     /// be sure of. <paramref name="img"/> is the scan as scanned, at <paramref name="ppi"/> pixels an inch (the analysis copy).
@@ -174,16 +177,18 @@ public static class PaperEdge
     }
 
     /// <summary>
-    /// Whether anything but specks differs from the lid outside the box, down to faint marks: a threshold just above the
-    /// scan's noise out there (measured, at least 8 levels), and a spot big enough not to be dust.
+    /// Whether anything but dust differs from the lid outside the box, down to faint marks: a threshold just above the scan's
+    /// noise out there (measured, at least 8 levels). Marks a tenth of an inch apart count as one, so a line of tiny letters is
+    /// seen for what it is. Dust is what stays small (<see cref="DustSide"/>), a lone letter isn't.
     /// </summary>
     private static bool AnythingOutside(byte[] pixels, int w, int h, int lid, int x0, int y0, int x1, int y1, double ppi)
     {
         var histogram = new int[256];
         var outside = 0;
+        bool In(int x, int y) => x >= x0 && x < x1 && y >= y0 && y < y1;
         for (var y = 0; y < h; y++)
             for (var x = 0; x < w; x++)
-                if (x < x0 || x >= x1 || y < y0 || y >= y1)
+                if (!In(x, y))
                 {
                     histogram[Math.Abs(pixels[y * w + x] - lid)]++;
                     outside++;
@@ -193,38 +198,50 @@ public static class PaperEdge
         while (median < 255 && (seenSoFar += histogram[median]) <= outside / 2) median++;
         var limit = Math.Max(8, median * 3 + 2);
 
-        var minSpot = Math.Max(4, (int)(ppi * ppi / 10_000 * 6));
+        // Marks: pixels past the limit with another beside them (a lone one is noise).
+        var marks = new List<int>();
+        var isMark = new bool[pixels.Length];
+        bool Past(int x, int y) => x >= 0 && y >= 0 && x < w && y < h && !In(x, y) && Math.Abs(pixels[y * w + x] - lid) > limit;
+        for (var y = 0; y < h; y++)
+            for (var x = 0; x < w; x++)
+            {
+                if (!Past(x, y)) continue;
+                var alone = true;
+                for (var dy = -1; dy <= 1 && alone; dy++)
+                    for (var dx = -1; dx <= 1 && alone; dx++)
+                        if ((dx != 0 || dy != 0) && Past(x + dx, y + dy)) alone = false;
+                if (alone) continue;
+                isMark[y * w + x] = true;
+                marks.Add(y * w + x);
+            }
+
+        var reach = Math.Max(2, (int)Math.Round(ppi * Together));
+        var longest = ppi * Together * 4;
+        var dust = ppi * DustSide;
         var seen = new bool[pixels.Length];
         var stack = new Stack<int>();
-        for (var start = 0; start < pixels.Length; start++)
+        foreach (var start in marks)
         {
-            if (seen[start] || Math.Abs(pixels[start] - lid) <= limit) continue;
-            var (sx, sy) = (start % w, start / w);
-            if (sx >= x0 && sx < x1 && sy >= y0 && sy < y1) continue;
-            var size = 0;
+            if (seen[start]) continue;
+            int minX = w, minY = h, maxX = -1, maxY = -1;
             seen[start] = true;
             stack.Push(start);
             while (stack.Count > 0)
             {
                 var i = stack.Pop();
                 var (x, y) = (i % w, i / w);
-                if (++size >= minSpot)
-                {
-                    stack.Clear();
-                    return true;
-                }
-                for (var dy = -1; dy <= 1; dy++)
-                    for (var dx = -1; dx <= 1; dx++)
+                (minX, minY, maxX, maxY) = (Math.Min(minX, x), Math.Min(minY, y), Math.Max(maxX, x), Math.Max(maxY, y));
+                for (var ny = Math.Max(0, y - reach); ny <= Math.Min(h - 1, y + reach); ny++)
+                    for (var nx = Math.Max(0, x - reach); nx <= Math.Min(w - 1, x + reach); nx++)
                     {
-                        var (nx, ny) = (x + dx, y + dy);
-                        if (nx < 0 || ny < 0 || nx >= w || ny >= h) continue;
-                        if (nx >= x0 && nx < x1 && ny >= y0 && ny < y1) continue;
                         var n = ny * w + nx;
-                        if (seen[n] || Math.Abs(pixels[n] - lid) <= limit) continue;
+                        if (seen[n] || !isMark[n]) continue;
                         seen[n] = true;
                         stack.Push(n);
                     }
             }
+            var (across, down) = (maxX - minX + 1, maxY - minY + 1);
+            if (Math.Max(across, down) >= longest || Math.Min(across, down) >= dust) return true;
         }
         return false;
     }

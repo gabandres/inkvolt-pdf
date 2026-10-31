@@ -156,8 +156,24 @@ public class PageCleanupTests
     public void Dust_outside_the_sheet_does_not_stop_the_crop()
     {
         var scan = OnLid(SmallSheet(205), 600, 800, GlassW, GlassH, 120, 150, 245);
-        foreach (var (x, y) in new[] { (20, 30), (800, 100), (50, 1100), (780, 1000) }) Fill(scan, GlassW, x, y, 2, 1, 60);
+        foreach (var (x, y) in new[] { (20, 30), (800, 100), (50, 1100), (780, 1000) }) Fill(scan, GlassW, x, y, 3, 3, 60);
         Assert.NotNull(PaperEdge.Find(new GrayImage(GlassW, GlassH, scan), Ppi));
+    }
+
+    [Fact]
+    public void A_line_of_tiny_letters_outside_stops_the_crop()
+    {
+        var scan = OnLid(SmallSheet(205), 600, 800, GlassW, GlassH, 120, 150, 245);
+        for (var x = 150; x < 450; x += 6) Fill(scan, GlassW, x, 1050, 3, 4, 80); // each no bigger than dust, together a caption
+        Assert.Null(PaperEdge.Find(new GrayImage(GlassW, GlassH, scan), Ppi));
+    }
+
+    [Fact]
+    public void A_lone_letter_outside_stops_the_crop()
+    {
+        var scan = OnLid(SmallSheet(205), 600, 800, GlassW, GlassH, 120, 150, 245);
+        Fill(scan, GlassW, 780, 1050, 12, 14, 40);
+        Assert.Null(PaperEdge.Find(new GrayImage(GlassW, GlassH, scan), Ppi));
     }
 
     [Fact]
