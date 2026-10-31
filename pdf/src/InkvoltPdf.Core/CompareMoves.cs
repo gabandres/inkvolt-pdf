@@ -223,13 +223,14 @@ public static class CompareMoves
 /// Running headers and footers: a line at the top or bottom of most pages, the same but for its page number. Where both
 /// documents have the same one it is left out of the word diff, since page numbers land between other words wherever the
 /// text flows differently. A number that stays the same on every page isn't a page number ("Contract 123"): it must match
-/// too. A line only one document has, or that differs, is compared as text, so it is reported.
+/// too, and so does one that differs without counting up with the page ("Subtotal: 1,234.56"), which makes the line text. A line only one document has, or that differs, is compared as text, so it is reported.
 /// </summary>
 public static class CompareRunningLines
 {
     private const int EdgeLines = 2;       // lines looked at on each edge of a page
     private const int MinPageLines = 3;    // a page with less is all text, no furniture
     private const double MinShare = 0.6;
+    private const double MinCountingShare = 0.8; // of a line's steps from page to page: a section may start its numbering again
 
     /// <summary>For each page of each document, the [Start, End) ranges of its text to leave out of the diff.</summary>
     public static ((int Start, int End)[][] Old, (int Start, int End)[][] New) Find(IReadOnlyList<PageText> oldPages, IReadOnlyList<PageText> newPages, CancellationToken cancel = default)
@@ -247,7 +248,7 @@ public static class CompareRunningLines
     {
         var edges = new List<(string Raw, string Masked, int Start, int End)>[pages.Count];
         var eligible = 0;
-        var seen = new Dictionary<string, (int Pages, HashSet<string> Texts)>(StringComparer.Ordinal);
+        var seen = new Dictionary<string, (int Pages, HashSet<string> Texts, List<(int Page, string Raw)> Where)>(StringComparer.Ordinal);
         for (var p = 0; p < pages.Count; p++)
         {
             if ((p & 63) == 0) cancel.ThrowIfCancellationRequested();
@@ -256,13 +257,18 @@ public static class CompareRunningLines
             eligible++;
             foreach (var masked in edges[p].Select(e => e.Masked).Distinct())
             {
-                if (!seen.TryGetValue(masked, out var entry)) entry = (0, new HashSet<string>(StringComparer.Ordinal));
-                foreach (var e in edges[p].Where(e => e.Masked == masked)) entry.Texts.Add(e.Raw);
-                seen[masked] = (entry.Pages + 1, entry.Texts);
+                if (!seen.TryGetValue(masked, out var entry)) entry = (0, new HashSet<string>(StringComparer.Ordinal), []);
+                foreach (var e in edges[p].Where(e => e.Masked == masked))
+                {
+                    entry.Texts.Add(e.Raw);
+                    entry.Where.Add((p, e.Raw));
+                }
+                seen[masked] = (entry.Pages + 1, entry.Texts, entry.Where);
             }
         }
 
         var needed = Math.Max(2, (int)Math.Ceiling(eligible * MinShare));
+        var counting = new Dictionary<string, bool[]?>(StringComparer.Ordinal);
         var running = new HashSet<string>(StringComparer.Ordinal);
         var lines = new List<(string, int, int)>[pages.Count];
         for (var p = 0; p < pages.Count; p++)
@@ -271,13 +277,51 @@ public static class CompareRunningLines
             foreach (var (raw, masked, start, end) in edges[p])
             {
                 if (seen[masked].Pages < needed) continue;
-                // Numbers that change from page to page are page numbers; numbers that don't must match.
-                var key = seen[masked].Texts.Count > 1 ? masked : raw;
+                // A number that counts up with the page is a page number; any other number must match, on every page: a line
+                // whose numbers just differ ("Subtotal: 1,234.56") is text, and is compared.
+                if (!counting.TryGetValue(masked, out var slots)) counting[masked] = slots = CountingNumbers(seen[masked].Where);
+                if (seen[masked].Texts.Count > 1 && slots is null) continue;
+                var key = seen[masked].Texts.Count > 1 ? KeyOf(raw, slots!) : raw;
                 running.Add(key);
                 lines[p].Add((key, start, end));
             }
         }
         return (lines, running);
+    }
+
+    /// <summary>Which of a line's numbers count up with the page across the pages it is on; null when all the differing ones don't.</summary>
+    private static bool[]? CountingNumbers(List<(int Page, string Raw)> where)
+    {
+        var numbers = where.ConvertAll(w => Numbers(w.Raw));
+        var count = numbers[0].Count;
+        var slots = new bool[count];
+        var any = false;
+        for (var k = 0; k < count; k++)
+        {
+            int steps = 0, counted = 0;
+            var same = true;
+            for (var i = 1; i < where.Count; i++)
+            {
+                if (where[i].Page == where[i - 1].Page) continue;
+                steps++;
+                if (numbers[i][k] != numbers[i - 1][k]) same = false;
+                if (long.TryParse(numbers[i][k], out var b) && long.TryParse(numbers[i - 1][k], out var a) && b - a == where[i].Page - where[i - 1].Page) counted++;
+            }
+            if (same) continue; // stays as it is, and must match
+            if (steps == 0 || counted < steps * MinCountingShare) return null;
+            slots[k] = any = true;
+        }
+        return any ? slots : null;
+    }
+
+    private static List<string> Numbers(string raw) =>
+        [.. System.Text.RegularExpressions.Regex.Matches(raw, @"\d+").Select(m => m.Value)];
+
+    /// <summary>The line with the numbers that count up masked, the others as they are.</summary>
+    private static string KeyOf(string raw, bool[] slots)
+    {
+        var k = 0;
+        return System.Text.RegularExpressions.Regex.Replace(raw, @"\d+", m => k < slots.Length && slots[k++] ? "#" : m.Value);
     }
 
     /// <summary>The topmost and bottommost lines of a page, by where they are, not where the file stores them.</summary>
@@ -298,7 +342,7 @@ public static class CompareRunningLines
         return [.. edge.Select(l =>
         {
             var raw = s[l.Start..l.End].Trim();
-            return (raw, new string([.. raw.Select(c => char.IsDigit(c) ? '#' : c)]), l.Start, l.End);
+            return (raw, System.Text.RegularExpressions.Regex.Replace(raw, @"\d+", "#"), l.Start, l.End);
         })];
     }
 }

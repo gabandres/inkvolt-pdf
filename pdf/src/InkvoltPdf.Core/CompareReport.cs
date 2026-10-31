@@ -1,7 +1,11 @@
 namespace InkvoltPdf.Core;
 
 /// <summary>What looks different on a page of the new document, besides its words: boxes in the page's points.</summary>
-public sealed record CompareVisualArea(int NewPage, IReadOnlyList<RectD> Boxes);
+public sealed record CompareVisualArea(int NewPage, IReadOnlyList<RectD> Boxes)
+{
+    /// <summary>Areas beyond the page's edge (the old page was larger), which only a note can mention.</summary>
+    public int OffPage { get; init; }
+}
 
 /// <summary>
 /// A compare report: a copy of the new document with the changes as comments, so it can be saved, shared and read in
@@ -85,7 +89,7 @@ public static class CompareReport
                     var text = $"Removed: “{Quote(c.OldText)}”{misread}";
                     if (c.NewAnchor is { } a && a.Page < doc.PageCount && a.Page < newPages.Count && Spot(newPages[a.Page], a.Start) is { } spot)
                         Annotations.AddNoteIn(doc, a.Page, spot.X, spot.Y, text, Author, RemovedColor);
-                    else if (result.Rows[c.Row].NewPage is { } p && p < doc.PageCount)
+                    else if (NearestNewPage(result, c.Row, doc.PageCount) is { } p)
                         MarginNote(p, text, RemovedColor);
                     break;
                 }
@@ -108,10 +112,22 @@ public static class CompareReport
             if (area.NewPage >= doc.PageCount) continue;
             foreach (var box in area.Boxes)
                 Annotations.AddTextMarkupIn(doc, area.NewPage, TextMarkupKind.Highlight, [box], VisualColor, $"Looks different in {oldName}.", Author);
+            if (area.OffPage > 0)
+                MarginNote(area.NewPage, $"{oldName}'s page is larger: {(area.OffPage == 1 ? "1 area" : $"{area.OffPage} areas")} beyond this page's edge {(area.OffPage == 1 ? "looks" : "look")} different.", VisualColor);
         }
         foreach (var (page, notes) in margin)
             Annotations.AddNoteIn(doc, page, 6, 6, string.Join("\n\n", notes.Select(n => n.Text)), Author, notes[0].Color);
         return PdfObj.Save(doc);
+    }
+
+    /// <summary>The new document's page for a change on a row: the row's, else the next one's, else the last before it (a page only the old document has has none).</summary>
+    private static int? NearestNewPage(CompareResult result, int row, int pageCount)
+    {
+        for (var r = row; r < result.Rows.Count; r++)
+            if (result.Rows[r].NewPage is { } p && p < pageCount) return p;
+        for (var r = row - 1; r >= 0; r--)
+            if (result.Rows[r].NewPage is { } p && p < pageCount) return p;
+        return null;
     }
 
     /// <summary>Where a note for a position in the text goes: just above the character before it (or after it).</summary>

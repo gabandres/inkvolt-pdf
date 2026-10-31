@@ -72,6 +72,39 @@ public class CompareAlignTests
     }
 
     [Fact]
+    public void AChangedWordOnAScanShowsAtTheScaleScansAreCheckedAt()
+    {
+        byte[] Pdf(string text) => TestPdf.Make(1, text);
+        using var old = PdfEngine.Open(Pdf("The Buyer pays 1,250 on delivery"), MuPDFCore.InputFileTypes.PDF, null);
+        using var changed = PdfEngine.Open(Pdf("The Seller pays 7,950 on delivery"), MuPDFCore.InputFileTypes.PDF, null);
+        var diff = VisualCompare.OverlayScans(old.Render(0, VisualCompare.ScanCheckScale), changed.Render(0, VisualCompare.ScanCheckScale), VisualCompare.ScanCheckScale);
+        Assert.NotEmpty(diff.Regions);
+    }
+
+    [Fact]
+    public void WhatIsRemovedFromAPageWithNoCounterpartStillGetsItsNote()
+    {
+        var moved = string.Join(' ', Enumerable.Range(0, 80).Select(i => $"m{i}"));
+        var first = string.Join(' ', Enumerable.Range(0, 60).Select(i => $"a{i}"));
+        var last = string.Join(' ', Enumerable.Range(0, 60).Select(i => $"z{i}"));
+        var oldPages = new[] { Line(first, 100), Line(moved + " gone0 gone1 gone2 gone3 gone4", 100), Line(last, 100) };
+        var newPages = new[] { Line(first, 100), Line(last + " " + moved, 100) };
+        var r = DocumentCompare.Run(oldPages, newPages);
+        Assert.Contains(r.Changes, c => c.Kind == ChangeKind.Deleted);
+        var notes = Annotations.Read(CompareReport.Annotate(TestPdf.Make(2, "x"), null, r, newPages, "old.pdf", r.Summary()), null);
+        Assert.Contains(notes, a => a.Contents.Contains("gone0", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void AnAreaBeyondTheChangedPagesEdgeIsMentioned()
+    {
+        var (o, n) = (Line("same words here", 100), Line("same words here", 100));
+        var r = DocumentCompare.Run([o], [n]);
+        var notes = Annotations.Read(CompareReport.Annotate(TestPdf.Make(1, "x"), null, r, [n], "old.pdf", "summary", [new CompareVisualArea(0, []) { OffPage = 2 }]), null);
+        Assert.Contains(notes, a => a.Contents.Contains("2 areas beyond this page's edge look different", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public void TheSamePageNeedsNoAlignment()
     {
         var page = Scan();

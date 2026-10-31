@@ -367,9 +367,9 @@ internal sealed class CompareWindow : Window
                     {
                         t = engine.GetComparePage(p, cancel);
                     }
-                    catch (MuPDFCore.MuPDFException)
+                    catch (Exception ex) when (ex is MuPDFCore.MuPDFException or ArgumentException)
                     {
-                        t = ComparePage.Empty; // a damaged page: no text to compare (its row says so)
+                        t = ComparePage.Empty; // a damaged page, or text mapped to no character: no text to compare (its row says so)
                     }
                     report.Report(Interlocked.Increment(ref done));
                     return t;
@@ -496,7 +496,7 @@ internal sealed class CompareWindow : Window
                 : CompareAlign.Resample(newEngine.Render(newPage, scale, part, cancel), part.X, part.Y, scale, alignment, width, height, area.X, area.Y, cancel);
         }
         return scan
-            ? VisualCompare.Overlay(old, changed, minPixels: 6, cancel: cancel, slack: (int)Math.Clamp(Math.Round(1.5 * scale), 2, 6))
+            ? VisualCompare.OverlayScans(old, changed, scale, cancel)
             : VisualCompare.Overlay(old, changed, cancel: cancel);
     }
 
@@ -696,18 +696,20 @@ internal sealed class CompareWindow : Window
                 var scan = IsScanRow(view.Row);
                 if (!noText)
                 {
-                    if (scan != (_oldScan[o] && _newScan[n]) || !VisualAreas.SameLayout(_oldText[o], _newText[n]) || ++looked > MaxLookedAtRows) continue;
+                    // Two scans never sit in quite the same place, so only pages made by a program can say their text stayed put.
+                    if (scan != (_oldScan[o] && _newScan[n]) || (!scan && !VisualAreas.SameLayout(_oldText[o], _newText[n])) || ++looked > MaxLookedAtRows) continue;
                 }
                 VisualDiff diff;
                 PageAlignment alignment;
-                const double Scale = 0.7;
+                // Scans at the scale a changed word still shows at once ink may land a little off (the slack is in points).
+                var scale = scan ? VisualCompare.ScanCheckScale : 0.7;
                 try
                 {
                     var oldEngine = _oldEngine!;
                     var newEngine = _newEngine!;
                     alignment = await AlignmentOfAsync(view, cancel);
                     var size = view.SizeOf(CompareRowView.Part.Overlay);
-                    diff = await Task.Run(() => OverlayOf(oldEngine, o, newEngine, n, Scale, null, size, alignment, scan, cancel), cancel);
+                    diff = await Task.Run(() => OverlayOf(oldEngine, o, newEngine, n, scale, null, size, alignment, scan, cancel), cancel);
                 }
                 catch (Exception ex) when (ex is OperationCanceledException or ObjectDisposedException)
                 {
@@ -722,7 +724,7 @@ internal sealed class CompareWindow : Window
                     }
                     continue;
                 }
-                var inPoints = diff.Regions.Select(r => new RectD(r.X / Scale, r.Y / Scale, r.Width / Scale, r.Height / Scale)).ToList();
+                var inPoints = diff.Regions.Select(r => new RectD(r.X / scale, r.Y / scale, r.Width / scale, r.Height / scale)).ToList();
                 var boxes = noText ? inPoints : VisualAreas.OffText(inPoints, _oldText[o], _newText[n], alignment);
                 var areas = boxes.Count;
                 var what = view.Row.Text switch
@@ -739,7 +741,10 @@ internal sealed class CompareWindow : Window
                     view.InvalidateVisual();
                 }
                 if (areas == 0) continue;
-                _visualAreas.Add(new CompareVisualArea(n, [.. boxes.Select(alignment.BoxToNew)]));
+                // An area beyond the changed page's edge has nowhere to be marked: a page's note says so.
+                var page = _newEngine!.GetPage(n);
+                var onPage = boxes.Select(b => alignment.BoxToNew(b).Intersect(new RectD(0, 0, page.Width, page.Height))).ToList();
+                _visualAreas.Add(new CompareVisualArea(n, [.. onPage.Where(b => !b.IsEmpty)]) { OffPage = onPage.Count(b => b.IsEmpty) });
                 if (!_makingReport) _report.IsEnabled = true;
 
                 // Listed after the row's other entries, in row order.
@@ -902,7 +907,8 @@ internal sealed class CompareWindow : Window
             var d = Distance(i);
             if (d > 0) _rows[i].ReleaseTiles();
             total += _rows[i].Bytes;
-            if (d > KeepRendered || (d > 0 && total > BitmapBudget))
+            // The rows beside the view are what NextJob renders next: freeing them would have it render them again, for ever.
+            if (d > KeepRendered || (d > 1 && total > BitmapBudget))
             {
                 total -= _rows[i].Bytes;
                 _rows[i].Release();
@@ -1107,7 +1113,7 @@ internal sealed class CompareWindow : Window
         {
             if (!_checkTask.IsCompleted) Announce("Finishing the visual check first, so the copy has what looks different too…");
             await _checkTask;
-            var looks = _visualAreas.Count == 0 ? "" : $" {_visualAreas.Sum(a => a.Boxes.Count)} other areas look different.";
+            var looks = _visualAreas.Count == 0 ? "" : $" {_visualAreas.Sum(a => a.Boxes.Count + a.OffPage)} other areas look different.";
             var summary = $"Compared with {_old.Name} on {DateTime.Now.ToString("g", CultureInfo.CurrentCulture)}: {r.Summary()}.{looks}";
             var areas = _visualAreas.ToList();
             var bytes = await Task.Run(() => CompareReport.Annotate(_new.Data, _new.Password, r, _newText, _old.Name, summary, areas));

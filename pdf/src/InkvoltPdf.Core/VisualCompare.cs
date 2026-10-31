@@ -74,6 +74,13 @@ public static class VisualCompare
         return new VisualDiff(new RenderedImage(w, h, output), changed, w * h == 0 ? 0 : (double)changed / (w * h), regions);
     }
 
+    /// <summary>Scale to check two scans at: lower, the slack below takes in whole changed words.</summary>
+    public const double ScanCheckScale = 1.5;
+
+    /// <summary>The overlay of two scans rendered at <paramref name="scale"/> pixels per point: ink may land a point and a half off, and a speck doesn't count.</summary>
+    public static VisualDiff OverlayScans(RenderedImage oldImage, RenderedImage newImage, double scale, CancellationToken cancel = default) =>
+        Overlay(oldImage, newImage, minPixels: 6, cancel: cancel, slack: (int)Math.Clamp(Math.Round(1.5 * scale), 2, 6));
+
     /// <summary>A scan's thin strokes come out this light where a program's are nearly black: still ink.</summary>
     private const int FaintInk = 205;
 

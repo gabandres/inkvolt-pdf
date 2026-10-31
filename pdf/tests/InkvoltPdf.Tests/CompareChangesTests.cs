@@ -237,6 +237,83 @@ public class CompareChangesTests
 
     // ---- Running headers and footers ----
 
+    /// <summary>Pages with a body of their own and a last line made from the page's number.</summary>
+    private static PageText[] Footed(int count, Func<int, string> footer, int bodyWords = 12) =>
+        [.. Enumerable.Range(0, count).Select(p => Page(
+            string.Join(' ', Enumerable.Range(0, bodyWords).Select(w => $"body{p}word{w}")),
+            string.Join(' ', Enumerable.Range(0, bodyWords).Select(w => $"more{p}word{w}")),
+            footer(p)))];
+
+    [Fact]
+    public void ANumberThatDiffersWithoutCountingUpIsCompared()
+    {
+        static string Sub(int p) => $"Subtotal: {1000 + p * 137},{10 + p}";
+        var r = DocumentCompare.Run(Footed(5, Sub), Footed(5, p => p == 2 ? "Subtotal: 9999,99" : Sub(p)));
+        Assert.False(r.Identical);
+        Assert.Contains(r.Changes, c => c.New is [{ Page: 2 }] && c.NewText.Contains("9999"));
+    }
+
+    [Fact]
+    public void AFixedNumberBesideAPageNumberMustMatch()
+    {
+        var r = DocumentCompare.Run(Footed(5, p => $"Contract 123 - Page {p + 1}"), Footed(5, p => $"Contract 456 - Page {p + 1}"));
+        Assert.Equal(5, r.Changes.Count(c => c.Kind == ChangeKind.Changed && c.OldText == "123" && c.NewText == "456"));
+    }
+
+    [Fact]
+    public void PageNumbersKeepOutOfItPastNineAndWithAFixedNumberBesideThem()
+    {
+        static string Foot(int p) => $"Contract 123 - Page {p + 1} of 14";
+        var r = DocumentCompare.Run(Footed(14, Foot), Footed(14, Foot));
+        Assert.Empty(r.Changes);
+        // A page removed: every later page's number is one less, and that's no change.
+        var shifted = Footed(14, Foot).ToList();
+        var after = Footed(14, Foot).Where((_, i) => i != 3).Select((page, i) => page).ToArray();
+        var cut = DocumentCompare.Run(shifted, after);
+        Assert.Equal(1, cut.PagesRemoved);
+        Assert.Single(cut.Changes);
+    }
+
+    private static PageText[] Flowing(IEnumerable<string> words, int perPage) =>
+        [.. words.Chunk(perPage).Select(chunk => Page([.. chunk.Chunk(12).Select(line => string.Join(' ', line))]))];
+
+    [Fact]
+    public void TextThatOnlyFlowedOntoAnotherPageIsNoPageChange()
+    {
+        var words = Enumerable.Range(0, 300).Select(i => $"w{i}").ToList();
+        var added = Enumerable.Range(0, 50).Select(i => $"new{i}");
+        var r = DocumentCompare.Run(Flowing(words, 100), Flowing(added.Concat(words), 100));
+        Assert.Equal(0, r.PagesInserted);
+        Assert.Equal(1, r.Inserted);
+        Assert.Single(r.Changes);
+    }
+
+    [Fact]
+    public void AWordRemovedOnAPageWhoseTextFlowedIsStillListed()
+    {
+        var words = Enumerable.Range(0, 300).Select(i => $"w{i}").ToList();
+        var changed = words.Where(w => w is not ("w270" or "w271" or "w272")).ToList();
+        var r = DocumentCompare.Run(Flowing(words, 100), Flowing(changed, 120));
+        Assert.Equal(0, r.PagesRemoved);
+        var c = Assert.Single(r.Changes);
+        Assert.Equal((ChangeKind.Deleted, "w270 w271 w272"), (c.Kind, c.OldText));
+    }
+
+    [Fact]
+    public void WhatIsLeftOnAPageThatMostlyMovedIsListed()
+    {
+        var moved = Enumerable.Range(0, 80).Select(i => $"m{i}").ToList();
+        var gone = Enumerable.Range(0, 15).Select(i => $"gone{i}").ToList();
+        var first = Enumerable.Range(0, 100).Select(i => $"a{i}").ToList();
+        var last = Enumerable.Range(0, 100).Select(i => $"z{i}").ToList();
+        var r = DocumentCompare.Run(
+            [Flowing(first, 100)[0], Flowing(moved.Concat(gone), 100)[0], Flowing(last, 100)[0]],
+            [Flowing(first, 100)[0], Flowing(last.Concat(moved), 200)[0]]);
+        Assert.Equal(0, r.PagesRemoved);
+        Assert.Equal(1, r.Moved);
+        Assert.Contains(r.Changes, c => c.Kind == ChangeKind.Deleted && c.OldText.StartsWith("gone0", StringComparison.Ordinal));
+    }
+
     private static PageText[] Bodied(string header, params (string Body, int Number)[] pages) =>
         [.. pages.Select(p => Page(header, p.Body, "more of the text on this page", "and a last line of it", $"Page {p.Number}"))];
 
